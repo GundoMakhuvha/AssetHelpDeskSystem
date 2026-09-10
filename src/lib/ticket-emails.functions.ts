@@ -35,11 +35,27 @@ async function sendEmail(to: string[], subject: string, html: string) {
 
 function layout(title: string, lines: string[]) {
   return `
-  <div style="font-family:Arial,Helvetica,sans-serif;background:#ffffff;padding:24px;color:#111827">
-    <h2 style="margin:0 0 12px;color:#12457a">${title}</h2>
-    ${lines.map((l) => `<p style="margin:0 0 8px;font-size:14px;line-height:1.5">${l}</p>`).join('')}
-    <p style="margin-top:20px;font-size:12px;color:#6b7280">Tipp Focus Help Desk</p>
-  </div>`;
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f3f4f6;padding:32px 16px;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+    <!-- Header -->
+    <div style="background:#12457a;padding:20px 32px;text-align:center;">
+      <img src="https://i.postimg.cc/prZt3kS1/tipp-focus-logo.png" alt="Tipp Focus" style="height:36px;display:inline-block;" />
+    </div>
+
+    <!-- Body -->
+    <div style="padding:32px;color:#111827;">
+      <h2 style="margin:0 0 16px;color:#12457a;font-size:20px;font-weight:700;">${title}</h2>
+      ${lines.map((l) => `<p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#374151;">${l}</p>`).join('')}
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;text-align:center;">
+      <p style="margin:0;font-size:12px;color:#6b7280;">Tipp Focus Help Desk</p>
+    </div>
+
+  </div>
+</div>`;
 }
 
 const esc = (v: unknown) =>
