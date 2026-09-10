@@ -8,25 +8,21 @@ const schema = z.object({
   note: z.string().max(2000).optional().nullable(),
 });
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/resend';
-
 function fromAddress() {
   const configured = (process.env['RESEND_FROM'] ?? '').trim();
   return configured || 'Tipp Focus Help Desk <helpdesk@capvtal.com>';
 }
 
 async function sendEmail(to: string[], subject: string, html: string) {
-  const lovableKey = process.env['LOVABLE_API_KEY'];
   const resendKey = process.env['RESEND_API_KEY'];
-  if (!lovableKey || !resendKey) throw new Error('Email is not configured on the server.');
+  if (!resendKey) throw new Error('Email is not configured on the server.');
   if (to.length === 0) return;
 
-  const res = await fetch(`${GATEWAY_URL}/emails`, {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': resendKey,
+      Authorization: `Bearer ${resendKey}`,
     },
     body: JSON.stringify({ from: fromAddress(), to, subject, html }),
   });
