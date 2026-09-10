@@ -25,7 +25,7 @@ import {
   Plus, Paperclip, Search, LifeBuoy, AlertOctagon, CheckCircle2, Clock, Download,
   Inbox, UserX, UserCheck, Timer, ChevronDown, ChevronUp, Gauge, X,
 } from "lucide-react";
-import { notifyTicketEvent } from "@/lib/ticket-emails.functions";
+import { sendTicketNotificationEmail } from "@/lib/ticket-notifications.functions";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -562,7 +562,7 @@ function NewTicketDialog({ onSaved }: { onSaved: () => void }) {
     if (error) return toast.error(error.message);
     toast.success("Ticket created");
     if (inserted?.id) {
-      notifyTicketEvent({ data: { ticketId: inserted.id, event: "created" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
+      sendTicketNotificationEmail({ data: { ticketId: inserted.id, event: "created" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
     }
     onSaved();
   };
@@ -668,10 +668,10 @@ function TicketDetail({
     toast.success("Ticket updated");
     const newAssignee = assignee === "__none__" ? null : assignee;
     if (newAssignee && newAssignee !== ticket.assigned_to) {
-      notifyTicketEvent({ data: { ticketId: ticket.id, event: "assigned" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
+      sendTicketNotificationEmail({ data: { ticketId: ticket.id, event: "assigned" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
     }
     if (status !== ticket.status) {
-      notifyTicketEvent({ data: { ticketId: ticket.id, event: "status" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
+      sendTicketNotificationEmail({ data: { ticketId: ticket.id, event: "status" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
     }
     onChanged();
   };
@@ -686,7 +686,7 @@ function TicketDetail({
     if (error) return toast.error(error.message);
     setBody(""); setInternal(false); refetch();
     if (!wasInternal) {
-      notifyTicketEvent({ data: { ticketId: ticket.id, event: "comment", note: text } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
+      sendTicketNotificationEmail({ data: { ticketId: ticket.id, event: "comment", note: text } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
     }
   };
 
