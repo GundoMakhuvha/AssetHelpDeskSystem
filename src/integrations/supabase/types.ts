@@ -568,6 +568,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      ticket_email_payload: { Args: { _ticket_id: string }; Returns: Json }
     }
     Enums: {
       app_role:
