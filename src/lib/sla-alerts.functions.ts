@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
+import { appLink } from '@/lib/app-url';
 
 const FALLBACK: Record<string, number> = { Critical: 240, High: 480, Medium: 1440, Low: 4320 };
 const WARN_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -117,7 +118,7 @@ export const runSlaBreachWarnings = createServerFn({ method: 'POST' })
                 t.category,
               )}) must be resolved by ${new Date(dueAt).toUTCString()} — about ${hours} hours from now.`,
               ctaLabel: 'Open ticket',
-              ctaHref: (process.env['APP_URL'] ?? '').trim().replace(/\/$/, '') + '/tickets',
+              ctaHref: appLink('/tickets'),
             }),
           );
         } catch {
