@@ -19,7 +19,6 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import logoUrl from "@/assets/tipp-focus-logo.png";
 import {
   ROLES_ASSET_READ,
-  ROLES_DASHBOARD,
   ROLES_HELPDESK,
   ROLE_LABELS,
   type AppRole,
@@ -33,7 +32,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, allow: ROLES_DASHBOARD },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/assets", label: "Asset Register", icon: Boxes, allow: ROLES_ASSET_READ },
   { to: "/verify", label: "Verification", icon: ScanLine, allow: ROLES_ASSET_READ },
   { to: "/reports", label: "Reports", icon: FileBarChart, allow: ROLES_ASSET_READ },
@@ -49,13 +48,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!loading && !user && loc.pathname !== "/login" && loc.pathname !== "/reset-password") {
       nav({ to: "/login" });
-      return;
     }
-    // Requestors don't have access to the Dashboard — send them to Help Desk.
-    if (!loading && user && role === "requestor" && loc.pathname === "/") {
-      nav({ to: "/tickets" });
-    }
-  }, [loading, user, role, loc.pathname, nav]);
+  }, [loading, user, loc.pathname, nav]);
 
   if (loading) {
     return (
