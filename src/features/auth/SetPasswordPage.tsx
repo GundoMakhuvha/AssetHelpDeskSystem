@@ -40,7 +40,11 @@ export function SetPasswordPage() {
       }
       const row = redeemed.current;
 
-      if (!(await supabase.auth.getSession()).data.session) {
+      // Always drop whatever session is already in this browser: it may belong to
+      // another (or a deleted) account, which makes the password update fail.
+      const current = (await supabase.auth.getUser()).data.user;
+      if (!current || current.email?.toLowerCase() !== row.email.toLowerCase()) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
         const { error: signInErr } = await supabase.auth.signInWithPassword({
           email: row.email,
           password: row.temp_password,
