@@ -26,7 +26,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
-import { createUserAsAdmin } from "@/lib/admin-users.client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -222,6 +221,7 @@ function AddUserDialog({ users }: { users: AdminUserRow[] }) {
     e.preventDefault();
     setBusy(true);
     try {
+      const { createUserAsAdmin } = await import("@/lib/admin-users.client");
       const res = await createUserAsAdmin({
         email: form.email,
         full_name: form.full_name,
