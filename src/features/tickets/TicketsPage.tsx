@@ -25,7 +25,10 @@ import {
   Plus, Paperclip, Search, LifeBuoy, AlertOctagon, CheckCircle2, Clock, Download,
   Inbox, UserX, UserCheck, Timer, ChevronDown, ChevronUp, Gauge, X,
 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { MentionTextarea } from "@/components/MentionTextarea";
 import { sendTicketNotificationEmail } from "@/lib/ticket-notifications.functions";
+import { runSlaBreachWarnings } from "@/lib/sla-alerts.functions";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -81,6 +84,14 @@ export function TicketsPage() {
     queryFn: async () => (await supabase.from("profiles").select("*")).data as Profile[] | null,
   });
 
+  const { data: catSlas } = useQuery({
+    queryKey: ["sla_category_policies"],
+    queryFn: async () => {
+      const { data } = await supabase.from("sla_category_policies" as never).select("*");
+      return (data ?? []) as unknown as { category: string; priority: TicketPriority; resolution_minutes: number }[];
+    },
+  });
+
   const { data: slas } = useQuery({
     queryKey: ["sla_policies"],
     queryFn: async () => {
@@ -98,11 +109,17 @@ export function TicketsPage() {
   });
 
   const slaMinutes = React.useCallback(
-    (p: TicketPriority) => slas?.find((s) => s.priority === p)?.resolution_minutes ?? FALLBACK_SLA[p],
-    [slas],
+    (p: TicketPriority, category?: string) =>
+      (category
+        ? catSlas?.find((s) => s.category === category && s.priority === p)?.resolution_minutes
+        : undefined) ??
+      slas?.find((s) => s.priority === p)?.resolution_minutes ??
+      FALLBACK_SLA[p],
+    [slas, catSlas],
   );
   const dueAt = React.useCallback(
-    (t: Ticket) => new Date(new Date(t.created_at).getTime() + slaMinutes(t.priority) * 60_000),
+    (t: Ticket) =>
+      new Date(new Date(t.created_at).getTime() + slaMinutes(t.priority, t.category) * 60_000),
     [slaMinutes],
   );
   const isBreached = React.useCallback(
@@ -111,6 +128,13 @@ export function TicketsPage() {
   );
 
   const all = React.useMemo(() => tickets ?? [], [tickets]);
+
+  // Admins get warned 12 hours before a ticket breaches its SLA.
+  const slaWarn = useServerFn(runSlaBreachWarnings);
+  React.useEffect(() => {
+    if (role !== "admin") return;
+    slaWarn({ data: undefined }).catch(() => undefined);
+  }, [role, slaWarn]);
 
   const stats = React.useMemo(() => {
     const openCount = all.filter(isOpen).length;
@@ -685,6 +709,22 @@ function TicketDetail({
     });
     if (error) return toast.error(error.message);
     setBody(""); setInternal(false); refetch();
+
+    // Notify anyone mentioned with "@Name" in the reply.
+    const mentioned = profiles.filter((p) => {
+      const name = p.full_name ?? p.email;
+      return p.id !== user.id && text.toLowerCase().includes(`@${name.toLowerCase()}`);
+    });
+    if (mentioned.length) {
+      await supabase.from("notifications").insert(
+        mentioned.map((p) => ({
+          user_id: p.id,
+          title: `You were mentioned on ticket #${String(ticket.ticket_number).padStart(5, "0")}`,
+          body: text.slice(0, 140),
+          link: "/tickets",
+        })),
+      );
+    }
     if (!wasInternal) {
       sendTicketNotificationEmail({ data: { ticketId: ticket.id, event: "comment", note: text } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
     }
@@ -743,7 +783,13 @@ function TicketDetail({
               <div className="whitespace-pre-wrap">{c.body}</div>
             </div>
           ))}
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a reply…" rows={3} />
+          <MentionTextarea
+            value={body}
+            onChange={setBody}
+            people={profiles}
+            rows={3}
+            placeholder="Write a reply… type @ to mention someone"
+          />
           <div className="flex items-center justify-between">
             {isStaff ? (
               <label className="flex items-center gap-2 text-xs">
