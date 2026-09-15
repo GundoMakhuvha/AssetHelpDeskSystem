@@ -97,6 +97,7 @@ export interface Profile {
   full_name: string | null;
   email: string;
   department: string | null;
+  manager_id?: string | null;
 }
 
 export interface Asset {
@@ -160,6 +161,8 @@ export interface AdminUserRow {
   full_name: string | null;
   department: string | null;
   role: AppRole | null;
+  manager_id: string | null;
+  manager_name: string | null;
   last_sign_in_at: string | null;
   user_created_at: string | null;
 }
