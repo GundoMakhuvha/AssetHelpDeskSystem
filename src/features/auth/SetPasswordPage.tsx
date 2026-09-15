@@ -18,25 +18,35 @@ export function SetPasswordPage() {
   const [pwd, setPwd] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  // Kept so a failed password attempt can be retried without re-using the one-time link.
+  const redeemed = React.useRef<Redeemed | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return toast.error("This link is missing its invite code.");
+    if (!token && !redeemed.current)
+      return toast.error("This link is missing its invite code.");
+    if (pwd.length < 8) return toast.error("Use at least 8 characters.");
     if (pwd !== confirm) return toast.error("The two passwords do not match.");
     setBusy(true);
     try {
-      const { data, error } = await supabase.rpc("redeem_setup_token" as never, {
-        _token: token,
-      } as never);
-      if (error) throw new Error(error.message);
-      const row = (data as unknown as Redeemed[])?.[0];
-      if (!row) throw new Error("This link has already been used or has expired.");
+      if (!redeemed.current) {
+        const { data, error } = await supabase.rpc("redeem_setup_token" as never, {
+          _token: token,
+        } as never);
+        if (error) throw new Error(error.message);
+        const row = (data as unknown as Redeemed[])?.[0];
+        if (!row) throw new Error("This link has already been used or has expired.");
+        redeemed.current = row;
+      }
+      const row = redeemed.current;
 
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: row.email,
-        password: row.temp_password,
-      });
-      if (signInErr) throw new Error(signInErr.message);
+      if (!(await supabase.auth.getSession()).data.session) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: row.email,
+          password: row.temp_password,
+        });
+        if (signInErr) throw new Error(signInErr.message);
+      }
 
       const { error: updErr } = await supabase.auth.updateUser({ password: pwd });
       if (updErr) throw new Error(updErr.message);
