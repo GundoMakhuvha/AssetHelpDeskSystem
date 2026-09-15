@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as SetupRouteImport } from './routes/setup'
+import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as LoginRouteImport } from './routes/login'
@@ -31,6 +32,11 @@ const TicketsRoute = TicketsRouteImport.update({
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetPasswordRoute = SetPasswordRouteImport.update({
+  id: '/set-password',
+  path: '/set-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
@@ -86,6 +94,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/set-password': typeof SetPasswordRoute
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
@@ -98,6 +107,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reports'
     | '/reset-password'
+    | '/set-password'
     | '/setup'
     | '/tickets'
     | '/verify'
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reports'
     | '/reset-password'
+    | '/set-password'
     | '/setup'
     | '/tickets'
     | '/verify'
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reports'
     | '/reset-password'
+    | '/set-password'
     | '/setup'
     | '/tickets'
     | '/verify'
@@ -129,6 +141,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ReportsRoute: typeof ReportsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SetPasswordRoute: typeof SetPasswordRoute
   SetupRoute: typeof SetupRoute
   TicketsRoute: typeof TicketsRoute
   VerifyRoute: typeof VerifyRoute
@@ -155,6 +168,13 @@ declare module '@tanstack/react-router' {
       path: '/setup'
       fullPath: '/setup'
       preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/set-password': {
+      id: '/set-password'
+      path: '/set-password'
+      fullPath: '/set-password'
+      preLoaderRoute: typeof SetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -201,6 +221,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ReportsRoute: ReportsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SetPasswordRoute: SetPasswordRoute,
   SetupRoute: SetupRoute,
   TicketsRoute: TicketsRoute,
   VerifyRoute: VerifyRoute,
