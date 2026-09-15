@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/lib/types";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 
 /**
  * Creates a user without any private server key, so it works on every host
@@ -56,7 +57,7 @@ export async function createUserAsAdmin(
   if (existsErr) throw new Error(existsErr.message);
   if (exists) throw new Error(`A user with the email ${email} already exists.`);
 
-  const origin = window.location.origin.replace(/\/$/, "");
+  const origin = PUBLIC_APP_URL.replace(/\/$/, "");
 
   const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: "POST",
