@@ -273,6 +273,36 @@ export type Database = {
         }
         Relationships: []
       }
+      password_setup_tokens: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          temp_password: string
+          token: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at?: string
+          temp_password: string
+          token: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          temp_password?: string
+          token?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -614,6 +644,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_setup_token: {
+        Args: { _email: string; _temp_password: string; _user_id: string }
+        Returns: string
+      }
       admin_email_exists: { Args: { _email: string }; Returns: boolean }
       admin_finalize_user: {
         Args: {
@@ -661,6 +695,13 @@ export type Database = {
       is_manager_of: {
         Args: { _manager: string; _user: string }
         Returns: boolean
+      }
+      redeem_setup_token: {
+        Args: { _token: string }
+        Returns: {
+          email: string
+          temp_password: string
+        }[]
       }
       ticket_email_payload: { Args: { _ticket_id: string }; Returns: Json }
     }
