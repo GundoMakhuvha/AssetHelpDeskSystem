@@ -18,13 +18,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Settings, Users, Shield, Tag, Database, LifeBuoy, Megaphone, Search, Save, UserPlus, Loader2 } from "lucide-react";
 import { CategoriesTab } from "@/features/setup/CategoriesTab";
+import { useTicketCategories } from "@/lib/setup-data";
 import { HelpdeskTab } from "@/features/setup/HelpdeskTab";
 import { AnnouncementsTab } from "@/features/setup/AnnouncementsTab";
 import { DataTab } from "@/features/setup/DataTab";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { PRIORITIES, type TicketPriority } from "@/lib/types";
+import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
 import { adminCreateUser } from "@/lib/admin-users.functions";
 import { format } from "date-fns";
@@ -89,6 +90,16 @@ function UsersTab() {
     },
   });
 
+  const setManager = async (userId: string, managerId: string) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ manager_id: managerId === "none" ? null : managerId } as never)
+      .eq("id", userId);
+    if (error) return toast.error(error.message);
+    toast.success("Line manager updated");
+    qc.invalidateQueries({ queryKey: ["admin_users"] });
+  };
+
   const setRole = async (userId: string, role: AppRole) => {
     const { error } = await supabase.rpc("admin_set_role" as never, { _user_id: userId, _role: role } as never);
     if (error) return toast.error(error.message);
@@ -116,7 +127,7 @@ function UsersTab() {
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email" className="pl-8" />
           </div>
-          <AddUserDialog />
+          <AddUserDialog users={data ?? []} />
         </div>
       </CardHeader>
 
@@ -129,13 +140,14 @@ function UsersTab() {
                 <TableHead>Email</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Line manager</TableHead>
                 <TableHead>Last sign-in</TableHead>
                 <TableHead>Created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">Loading…</TableCell></TableRow>}
-              {!isLoading && rows.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">No users.</TableCell></TableRow>}
+              {isLoading && <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">Loading…</TableCell></TableRow>}
+              {!isLoading && rows.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">No users.</TableCell></TableRow>}
               {rows.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
@@ -152,6 +164,17 @@ function UsersTab() {
                         <SelectItem value="helpdesk_agent">Help Desk Agent</SelectItem>
                         <SelectItem value="requestor">Requestor</SelectItem>
                         <SelectItem value="viewer">Viewer (legacy)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select value={u.manager_id ?? "none"} onValueChange={(v) => setManager(u.id, v)}>
+                      <SelectTrigger className="w-[170px]"><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No manager</SelectItem>
+                        {(data ?? []).filter((m) => m.id !== u.id).map((m) => (
+                          <SelectItem key={m.id} value={m.id}>{m.full_name ?? m.email}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </TableCell>
@@ -181,35 +204,42 @@ const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
   { value: "viewer", label: "Viewer (legacy)" },
 ];
 
-function AddUserDialog() {
+function AddUserDialog({ users }: { users: AdminUserRow[] }) {
   const qc = useQueryClient();
   const createUser = useServerFn(adminCreateUser);
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [form, setForm] = React.useState({
     email: "",
-    password: "",
     full_name: "",
     department: "",
+    manager_id: "none",
     role: "requestor" as AppRole,
   });
 
-  const reset = () => setForm({ email: "", password: "", full_name: "", department: "", role: "requestor" });
+  const reset = () =>
+    setForm({ email: "", full_name: "", department: "", manager_id: "none", role: "requestor" });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      await createUser({
+      const res = (await createUser({
         data: {
           email: form.email,
-          password: form.password,
           full_name: form.full_name,
           department: form.department || null,
+          manager_id: form.manager_id === "none" ? null : form.manager_id,
           role: form.role,
+          origin: window.location.origin,
         },
-      });
-      toast.success(`User ${form.email} created`);
+      })) as { invited: boolean; inviteLink: string; message: string };
+      if (res.invited) {
+        toast.success(`Invite sent to ${form.email} — they set their own password.`);
+      } else {
+        toast.warning(`User created, but the invite email failed. ${res.message}`);
+        console.info("Invite link:", res.inviteLink);
+      }
       qc.invalidateQueries({ queryKey: ["admin_users"] });
       reset();
       setOpen(false);
@@ -218,15 +248,6 @@ function AddUserDialog() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const genPassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%";
-    let p = "";
-    const arr = new Uint32Array(14);
-    crypto.getRandomValues(arr);
-    for (let i = 0; i < arr.length; i++) p += chars[arr[i] % chars.length];
-    setForm((f) => ({ ...f, password: p }));
   };
 
   return (
@@ -238,7 +259,7 @@ function AddUserDialog() {
         <DialogHeader>
           <DialogTitle>Add a new user</DialogTitle>
           <DialogDescription>
-            Creates the account immediately with a confirmed email. Share the temporary password with the user.
+            We email an invite link so the person creates their own password before signing in.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
@@ -258,13 +279,19 @@ function AddUserDialog() {
               onChange={(e) => setForm({ ...form, department: e.target.value })} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="nu-pw">Temporary password</Label>
-            <div className="flex gap-2">
-              <Input id="nu-pw" required minLength={8} value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })} />
-              <Button type="button" variant="outline" size="sm" onClick={genPassword}>Generate</Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Min 8 characters. Ask the user to change it after first sign-in.</p>
+            <Label>Line manager</Label>
+            <Select value={form.manager_id} onValueChange={(v) => setForm({ ...form, manager_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Select a line manager" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No manager</SelectItem>
+                {users.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.full_name ?? m.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Managers can view and reply to tickets created by their team.
+            </p>
           </div>
           <div className="space-y-1">
             <Label>Role</Label>
@@ -280,7 +307,7 @@ function AddUserDialog() {
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
             <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="h-4 w-4 mr-1 animate-spin" />} Create user
+              {busy && <Loader2 className="h-4 w-4 mr-1 animate-spin" />} Send invite
             </Button>
           </DialogFooter>
         </form>
@@ -289,7 +316,9 @@ function AddUserDialog() {
   );
 }
 
-interface SlaRow {
+interface SlaCategoryRow {
+  id?: string;
+  category: string;
   priority: TicketPriority;
   response_minutes: number;
   resolution_minutes: number;
@@ -303,44 +332,72 @@ const fmtMins = (m: number) => {
   return `${Math.round((m / 1440) * 10) / 10}d`;
 };
 
+const DEFAULT_MINUTES: Record<TicketPriority, { response: number; resolution: number }> = {
+  Critical: { response: 30, resolution: 240 },
+  High: { response: 60, resolution: 480 },
+  Medium: { response: 240, resolution: 1440 },
+  Low: { response: 480, resolution: 4320 },
+};
+
 function SlaTab() {
   const qc = useQueryClient();
+  const { data: categories } = useTicketCategories(false);
+  const [category, setCategory] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (!category && categories && categories.length) setCategory(categories[0]!.name);
+  }, [categories, category]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["sla_policies"],
+    queryKey: ["sla_category_policies"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sla_policies" as never).select("*");
+      const { data, error } = await supabase.from("sla_category_policies" as never).select("*");
       if (error) throw error;
-      const order: Record<TicketPriority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      return ((data ?? []) as SlaRow[]).sort((a, b) => order[a.priority] - order[b.priority]);
+      return (data ?? []) as unknown as SlaCategoryRow[];
     },
   });
 
-  const [draft, setDraft] = React.useState<Record<string, SlaRow>>({});
+  const [draft, setDraft] = React.useState<Record<string, SlaCategoryRow>>({});
+  const key = (c: string, p: TicketPriority) => `${c}::${p}`;
+
   React.useEffect(() => {
-    if (data) {
-      const map: Record<string, SlaRow> = {};
-      data.forEach((r) => (map[r.priority] = { ...r }));
-      setDraft(map);
-    }
+    if (!data) return;
+    const map: Record<string, SlaCategoryRow> = {};
+    data.forEach((r) => (map[key(r.category, r.priority)] = { ...r }));
+    setDraft(map);
   }, [data]);
 
-  const update = (p: TicketPriority, patch: Partial<SlaRow>) =>
-    setDraft((d) => ({ ...d, [p]: { ...d[p], ...patch } }));
+  const rowFor = (p: TicketPriority): SlaCategoryRow =>
+    draft[key(category, p)] ?? {
+      category,
+      priority: p,
+      response_minutes: DEFAULT_MINUTES[p].response,
+      resolution_minutes: DEFAULT_MINUTES[p].resolution,
+      business_hours_only: false,
+      notes: null,
+    };
+
+  const update = (p: TicketPriority, patch: Partial<SlaCategoryRow>) =>
+    setDraft((d) => ({ ...d, [key(category, p)]: { ...rowFor(p), ...patch } }));
 
   const save = async (p: TicketPriority) => {
-    const row = draft[p];
+    const row = rowFor(p);
     const { error } = await supabase
-      .from("sla_policies" as never)
-      .update({
-        response_minutes: row.response_minutes,
-        resolution_minutes: row.resolution_minutes,
-        business_hours_only: row.business_hours_only,
-        notes: row.notes,
-      } as never)
-      .eq("priority", p);
+      .from("sla_category_policies" as never)
+      .upsert(
+        {
+          category: row.category,
+          priority: row.priority,
+          response_minutes: row.response_minutes,
+          resolution_minutes: row.resolution_minutes,
+          business_hours_only: row.business_hours_only,
+          notes: row.notes,
+        } as never,
+        { onConflict: "category,priority" } as never,
+      );
     if (error) return toast.error(error.message);
-    toast.success(`${p} SLA saved`);
-    qc.invalidateQueries({ queryKey: ["sla_policies"] });
+    toast.success(`${category} · ${p} SLA saved`);
+    qc.invalidateQueries({ queryKey: ["sla_category_policies"] });
   };
 
   const priorityColor: Record<TicketPriority, string> = {
@@ -352,19 +409,35 @@ function SlaTab() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>SLA & Priorities</CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          Target response and resolution times per ticket priority. Times are in minutes.
-        </p>
+      <CardHeader className="gap-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle>SLA & Priorities</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Response and resolution targets per ticket category and priority. Times are in minutes.
+            </p>
+          </div>
+          <div className="w-56">
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+              <SelectContent>
+                {(categories ?? []).map((c: TicketCategoryRow) => (
+                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!isLoading && PRIORITIES.slice().reverse().map((p) => {
-          const row = draft[p];
-          if (!row) return null;
+        {!isLoading && !category && (
+          <p className="text-sm text-muted-foreground">Create a ticket category first.</p>
+        )}
+        {!isLoading && category && PRIORITIES.slice().reverse().map((p) => {
+          const row = rowFor(p);
           return (
-            <div key={p} className="rounded-lg border p-4 grid gap-4 md:grid-cols-[120px_1fr_1fr_auto_auto] md:items-end">
+            <div key={p} className="rounded-lg border p-4 grid gap-4 md:grid-cols-[150px_1fr_1fr_auto_auto] md:items-end">
               <div>
                 <Badge variant="outline" className={priorityColor[p]}>{p}</Badge>
                 <p className="text-xs text-muted-foreground mt-2">
@@ -401,7 +474,7 @@ function SlaTab() {
           );
         })}
         <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Shield className="h-3 w-3" /> Changes apply to new tickets immediately and are visible to all users.
+          <Shield className="h-3 w-3" /> Admins are alerted 12 hours before a ticket breaches its resolution target.
         </p>
       </CardContent>
     </Card>
