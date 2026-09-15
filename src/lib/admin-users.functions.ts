@@ -4,9 +4,10 @@ import { z } from 'zod';
 
 const createUserSchema = z.object({
   email: z.string().trim().email().max(255),
-  password: z.string().min(8).max(72),
   full_name: z.string().trim().min(1).max(120),
   department: z.string().trim().max(120).optional().nullable(),
+  manager_id: z.string().uuid().optional().nullable(),
+  origin: z.string().url(),
   role: z.enum([
     'admin',
     'technician',
@@ -17,6 +18,12 @@ const createUserSchema = z.object({
     'viewer',
   ]),
 });
+
+function randomPassword() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('') + 'Aa1!';
+}
 
 export const adminCreateUser = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
@@ -34,7 +41,6 @@ export const adminCreateUser = createServerFn({ method: 'POST' })
     const { createAdminClient } = await import('./admin-client.server');
     const supabaseAdmin = createAdminClient();
 
-
     const { data: existing } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -44,7 +50,7 @@ export const adminCreateUser = createServerFn({ method: 'POST' })
 
     const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password: data.password,
+      password: randomPassword(),
       email_confirm: true,
       user_metadata: { full_name: data.full_name },
     });
@@ -56,21 +62,61 @@ export const adminCreateUser = createServerFn({ method: 'POST' })
     const newId = created.user?.id;
     if (!newId) throw new Error('User created but no id returned');
 
-    // Ensure profile row exists with the given details (trigger may or may not have run)
-    const { error: pErr } = await supabaseAdmin
-      .from('profiles')
-      .upsert(
-        { id: newId, email, full_name: data.full_name, department: data.department ?? null },
-        { onConflict: 'id' },
-      );
+    const { error: pErr } = await supabaseAdmin.from('profiles').upsert(
+      {
+        id: newId,
+        email,
+        full_name: data.full_name,
+        department: data.department ?? null,
+        manager_id: data.manager_id ?? null,
+      },
+      { onConflict: 'id' },
+    );
     if (pErr) throw new Error(pErr.message);
 
-    // Replace role (trigger may have set admin by default)
     await supabaseAdmin.from('user_roles').delete().eq('user_id', newId);
     const { error: rErr } = await supabaseAdmin
       .from('user_roles')
       .insert({ user_id: newId, role: data.role });
     if (rErr) throw new Error(rErr.message);
 
-    return { id: newId, email };
+    // Invite: the new user sets their own password via a secure link.
+    const origin = data.origin.replace(/\/$/, '');
+    const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: `${origin}/reset-password` },
+    });
+    if (linkErr) throw new Error(`User created, but the invite link failed: ${linkErr.message}`);
+
+    const actionLink = link?.properties?.action_link;
+    if (!actionLink) throw new Error('User created, but no invite link was returned.');
+
+    try {
+      const { sendMail, brandLayout, escapeHtml } = await import('./mailer.server');
+      await sendMail(
+        [email],
+        'Set your Tipp Focus Help Desk password',
+        brandLayout({
+          badgeLabel: 'WELCOME',
+          badgeBg: '#e1f5ee',
+          badgeFg: '#085041',
+          title: `Welcome, ${escapeHtml(data.full_name)}`,
+          intro:
+            'An account has been created for you on the Tipp Focus Asset & Help Desk system. Choose your own password to get started. This link expires in 24 hours.',
+          ctaLabel: 'Create my password',
+          ctaHref: actionLink,
+        }),
+      );
+    } catch (e) {
+      return {
+        id: newId,
+        email,
+        invited: false,
+        inviteLink: actionLink,
+        message: e instanceof Error ? e.message : 'Invite email could not be sent.',
+      };
+    }
+
+    return { id: newId, email, invited: true, inviteLink: actionLink, message: '' };
   });
