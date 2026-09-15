@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import { z } from 'zod';
+import { appLink } from '@/lib/app-url';
 
 const schema = z.object({
   ticketId: z.string().uuid(),
@@ -20,8 +21,7 @@ function fromAddress() {
 }
 
 function appUrl(path: string) {
-  const base = serverSecret('APP_URL').replace(/\/$/, '');
-  return base ? `${base}${path}` : '#';
+  return appLink(path);
 }
 
 async function sendEmail(to: string[], subject: string, html: string) {
@@ -184,6 +184,8 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
       requestor_name?: string | null;
       assignee_email: string | null;
       assignee_name?: string | null;
+      manager_email?: string | null;
+      manager_name?: string | null;
       staff_emails: string[];
     } | null;
     if (!info?.ticket) throw new Error('Ticket not found');
@@ -202,6 +204,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
     const requestorEmail = info.requestor_email;
     const assigneeEmail = info.assignee_email;
     const staffEmails = (info.staff_emails ?? []).filter(Boolean);
+    const managerEmail = info.manager_email ?? null;
 
     const requester: Person = requestorEmail
       ? { name: info.requestor_name ?? null, email: requestorEmail }
@@ -235,7 +238,9 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
             intro: 'Thanks — our IT team has received your request and will be in touch shortly.',
           }),
         );
-      const alertList = staffEmails.filter((e) => e !== requestorEmail);
+      const alertList = [...staffEmails, managerEmail].filter(
+        (e): e is string => !!e && e !== requestorEmail,
+      );
       if (alertList.length)
         await sendEmail(
           alertList,
@@ -268,7 +273,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
 
     if (data.event === 'status') {
       const resolved = ticket.status === 'Resolved' || ticket.status === 'Closed';
-      const to = [requestorEmail, assigneeEmail].filter(Boolean) as string[];
+      const to = [requestorEmail, assigneeEmail, managerEmail].filter(Boolean) as string[];
       const statusStyle = STATUS_STYLES[ticket.status ?? 'Open'] ?? STATUS_STYLES['Open']!;
       if (to.length)
         await sendEmail(
@@ -288,7 +293,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
     }
 
     if (data.event === 'comment') {
-      const to = [requestorEmail, assigneeEmail].filter(Boolean) as string[];
+      const to = [requestorEmail, assigneeEmail, managerEmail].filter(Boolean) as string[];
       if (to.length)
         await sendEmail(
           Array.from(new Set(to)),
