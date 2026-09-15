@@ -28,6 +28,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { MentionTextarea } from "@/components/MentionTextarea";
 import { sendTicketNotificationEmail } from "@/lib/ticket-notifications.functions";
+import { sendMentionEmail } from "@/lib/mention-email.functions";
 import { runSlaBreachWarnings } from "@/lib/sla-alerts.functions";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
@@ -716,14 +717,26 @@ function TicketDetail({
       return p.id !== user.id && text.toLowerCase().includes(`@${name.toLowerCase()}`);
     });
     if (mentioned.length) {
+      const ref = `#${String(ticket.ticket_number).padStart(5, "0")}`;
       await supabase.from("notifications").insert(
         mentioned.map((p) => ({
           user_id: p.id,
-          title: `You were mentioned on ticket #${String(ticket.ticket_number).padStart(5, "0")}`,
+          title: `You were mentioned on ticket ${ref}`,
           body: text.slice(0, 140),
           link: "/tickets",
         })),
       );
+      sendMentionEmail({
+        data: {
+          ticketId: ticket.id,
+          ticketRef: ref,
+          ticketTitle: ticket.title,
+          userIds: mentioned.map((p) => p.id),
+          authorName:
+            profiles.find((p) => p.id === user.id)?.full_name ?? user.email ?? "A colleague",
+          note: text.slice(0, 500),
+        },
+      }).catch((e: any) => toast.error("Mention email failed: " + (e?.message ?? e)));
     }
     if (!wasInternal) {
       sendTicketNotificationEmail({ data: { ticketId: ticket.id, event: "comment", note: text } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
