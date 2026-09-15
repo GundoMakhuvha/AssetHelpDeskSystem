@@ -280,6 +280,7 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          manager_id: string | null
         }
         Insert: {
           created_at?: string
@@ -287,6 +288,7 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          manager_id?: string | null
         }
         Update: {
           created_at?: string
@@ -294,6 +296,54 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          manager_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sla_category_policies: {
+        Row: {
+          business_hours_only: boolean
+          category: string
+          created_at: string
+          id: string
+          notes: string | null
+          priority: Database["public"]["Enums"]["ticket_priority_t"]
+          resolution_minutes: number
+          response_minutes: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          business_hours_only?: boolean
+          category: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          priority: Database["public"]["Enums"]["ticket_priority_t"]
+          resolution_minutes: number
+          response_minutes: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          business_hours_only?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          priority?: Database["public"]["Enums"]["ticket_priority_t"]
+          resolution_minutes?: number
+          response_minutes?: number
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -395,6 +445,32 @@ export type Database = {
           },
           {
             foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_sla_alerts: {
+        Row: {
+          created_at: string
+          kind: string
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          kind: string
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          kind?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_sla_alerts_ticket_id_fkey"
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "tickets"
@@ -546,6 +622,8 @@ export type Database = {
           full_name: string
           id: string
           last_sign_in_at: string
+          manager_id: string
+          manager_name: string
           role: Database["public"]["Enums"]["app_role"]
           user_created_at: string
         }[]
@@ -566,6 +644,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_manager_of: {
+        Args: { _manager: string; _user: string }
         Returns: boolean
       }
       ticket_email_payload: { Args: { _ticket_id: string }; Returns: Json }
