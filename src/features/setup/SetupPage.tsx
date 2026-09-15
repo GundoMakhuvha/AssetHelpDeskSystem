@@ -1,6 +1,5 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +26,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
-import { adminCreateUser } from "@/lib/admin-users.functions";
+import { createUserAsAdmin } from "@/lib/admin-users.client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -206,7 +205,6 @@ const ROLE_OPTIONS: { value: AppRole; label: string }[] = [
 
 function AddUserDialog({ users }: { users: AdminUserRow[] }) {
   const qc = useQueryClient();
-  const createUser = useServerFn(adminCreateUser);
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [form, setForm] = React.useState({
@@ -224,21 +222,19 @@ function AddUserDialog({ users }: { users: AdminUserRow[] }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const res = (await createUser({
-        data: {
-          email: form.email,
-          full_name: form.full_name,
-          department: form.department || null,
-          manager_id: form.manager_id === "none" ? null : form.manager_id,
-          role: form.role,
-          origin: window.location.origin,
-        },
-      })) as { invited: boolean; inviteLink: string; message: string };
+      const res = await createUserAsAdmin({
+        email: form.email,
+        full_name: form.full_name,
+        department: form.department || null,
+        manager_id: form.manager_id === "none" ? null : form.manager_id,
+        role: form.role,
+      });
       if (res.invited) {
         toast.success(`Invite sent to ${form.email} — they set their own password.`);
       } else {
-        toast.warning(`User created, but the invite email failed. ${res.message}`);
-        console.info("Invite link:", res.inviteLink);
+        toast.warning(
+          `User created, but the invite email could not be sent. ${res.message} They can use "Forgot password" on the sign-in page.`,
+        );
       }
       qc.invalidateQueries({ queryKey: ["admin_users"] });
       reset();
