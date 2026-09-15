@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/lib/types";
 import { PUBLIC_APP_URL } from "@/lib/app-url";
+import { sendInviteEmail } from "@/lib/invite-email.functions";
 
 /**
  * Creates a user without any private server key, so it works on every host
@@ -58,6 +59,7 @@ export async function createUserAsAdmin(
   if (exists) throw new Error(`A user with the email ${email} already exists.`);
 
   const origin = PUBLIC_APP_URL.replace(/\/$/, "");
+  const password = throwawayPassword();
 
   const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: "POST",
@@ -68,7 +70,7 @@ export async function createUserAsAdmin(
     },
     body: JSON.stringify({
       email,
-      password: throwawayPassword(),
+      password,
       data: { full_name: fullName },
       gotrue_meta_security: {},
     }),
@@ -107,14 +109,26 @@ export async function createUserAsAdmin(
   } as never);
   if (finalizeErr) throw new Error(finalizeErr.message);
 
-  const { error: mailErr } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/reset-password`,
-  });
+  // Branded, single-use invite sent from the company mailbox (no third-party sender).
+  let invited = false;
+  let message = "";
+  try {
+    const { data: token, error: tokenErr } = await supabase.rpc(
+      "admin_create_setup_token" as never,
+      { _user_id: newId, _email: email, _temp_password: password } as never,
+    );
+    if (tokenErr) throw new Error(tokenErr.message);
+    await sendInviteEmail({
+      data: {
+        email,
+        full_name: fullName,
+        link: `${origin}/set-password?token=${token as unknown as string}`,
+      },
+    });
+    invited = true;
+  } catch (err) {
+    message = err instanceof Error ? err.message : "The invite email could not be sent.";
+  }
 
-  return {
-    id: newId,
-    email,
-    invited: !mailErr,
-    message: mailErr?.message ?? "",
-  };
+  return { id: newId, email, invited, message };
 }
