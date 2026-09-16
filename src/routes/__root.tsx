@@ -39,7 +39,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Tipp Focus internal platform for asset tracking, verification, reporting and help desk tickets.",
+          "Developed By: Gundo Makhuvha",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
