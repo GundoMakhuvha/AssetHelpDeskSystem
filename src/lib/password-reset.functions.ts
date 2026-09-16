@@ -6,6 +6,11 @@ import { appLink } from '@/lib/app-url';
 
 const schema = z.object({ email: z.string().email() });
 
+// Publishable (public) values — safe defaults so the flow works on any host.
+const FALLBACK_URL = 'https://jsifsskhbyrgbmsdezqs.supabase.co';
+const FALLBACK_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzaWZzc2toYnlyZ2Jtc2RlenFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NzAxOTIsImV4cCI6MjA5MzU0NjE5Mn0.ZHodmo_0A-VXO4H4uZxz6QOpnkTdAuyZSEZfPkrt-QI';
+
 function env(name: string): string {
   return (process.env[name] ?? '').trim().replace(/^['"]|['"]$/g, '');
 }
@@ -17,14 +22,17 @@ function env(name: string): string {
 export const requestPasswordReset = createServerFn({ method: 'POST' })
   .inputValidator((d: unknown) => schema.parse(d))
   .handler(async ({ data }) => {
-    const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
+    const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL') || FALLBACK_URL;
     const key =
       env('SUPABASE_PUBLISHABLE_KEY') ||
       env('VITE_SUPABASE_PUBLISHABLE_KEY') ||
-      env('VITE_SUPABASE_ANON_KEY');
+      env('VITE_SUPABASE_ANON_KEY') ||
+      FALLBACK_KEY;
     const mailSecret = env('APP_MAIL_SECRET');
-    if (!url || !key || !mailSecret) {
-      throw new Error('Password reset is not configured on this deployment.');
+    if (!mailSecret) {
+      throw new Error(
+        'Password reset is not configured: the APP_MAIL_SECRET environment variable is missing from this deployment.',
+      );
     }
 
     const client = createClient(url, key, { auth: { persistSession: false } });
