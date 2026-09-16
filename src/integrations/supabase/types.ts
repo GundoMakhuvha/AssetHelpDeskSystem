@@ -86,6 +86,24 @@ export type Database = {
         }
         Relationships: []
       }
+      app_secrets: {
+        Row: {
+          created_at: string
+          key: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           asset_condition:
@@ -269,6 +287,33 @@ export type Database = {
           is_read?: boolean
           link?: string | null
           title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      password_reset_tokens: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          token: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at?: string
+          token: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          token?: string
+          used_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -681,6 +726,9 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_password_reset_token:
+        | { Args: { _email: string }; Returns: string }
+        | { Args: { _email: string; _secret: string }; Returns: string }
       current_role: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
@@ -695,6 +743,10 @@ export type Database = {
       is_manager_of: {
         Args: { _manager: string; _user: string }
         Returns: boolean
+      }
+      redeem_password_reset: {
+        Args: { _new_password: string; _token: string }
+        Returns: string
       }
       redeem_setup_token: {
         Args: { _token: string }
