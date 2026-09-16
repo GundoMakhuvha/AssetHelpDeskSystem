@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { requestPasswordReset } from "@/lib/password-reset.functions";
+import { PUBLIC_APP_URL } from "@/lib/app-url";
 import logoUrl from "@/assets/tipp-focus-logo.png";
 
 export function LoginPage() {
@@ -65,6 +68,7 @@ function SignInForm() {
   const [password, setPassword] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const nav = useNavigate();
+  const sendReset = useServerFn(requestPasswordReset);
 
   const handle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,11 +82,12 @@ function SignInForm() {
 
   const reset = async () => {
     if (!email) return toast.error("Enter your email first");
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Password reset email sent");
+    try {
+      await sendReset({ data: { email } });
+      toast.success("If that email is registered, a reset link is on its way.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the reset email.");
+    }
   };
 
   return (
@@ -103,7 +108,9 @@ function SignInForm() {
       <Button type="submit" className="w-full" disabled={busy}>
         {busy ? "Signing in…" : "Sign in"}
       </Button>
-      
+      <button type="button" onClick={reset} className="text-xs text-muted-foreground hover:underline">
+        Forgot password?
+      </button>
     </form>
   );
 }
@@ -121,7 +128,7 @@ function SignUpForm({ onDone }: { onDone: () => void }) {
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: PUBLIC_APP_URL,
         data: { full_name: fullName },
       },
     });
