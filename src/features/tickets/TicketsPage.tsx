@@ -219,9 +219,24 @@ export function TicketsPage() {
 
   const bulkUpdate = async (patch: Record<string, unknown>, label: string) => {
     if (selected.length === 0) return;
+    const before = all.filter((t) => selected.includes(t.id));
     const { error } = await supabase.from("tickets").update(patch).in("id", selected);
     if (error) return toast.error(error.message);
     toast.success(`${selected.length} ticket(s) ${label}`);
+
+    // Bulk changes must trigger the same emails as the single-ticket view.
+    const notify = async () => {
+      for (const t of before) {
+        if ("assigned_to" in patch && patch.assigned_to && patch.assigned_to !== t.assigned_to) {
+          await sendTicketNotificationEmail({ data: { ticketId: t.id, event: "assigned" } });
+        }
+        if ("status" in patch && patch.status !== t.status) {
+          await sendTicketNotificationEmail({ data: { ticketId: t.id, event: "status" } });
+        }
+      }
+    };
+    notify().catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
+
     setSelected([]);
     qc.invalidateQueries({ queryKey: ["tickets"] });
   };
