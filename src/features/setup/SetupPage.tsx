@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Users, Shield, Tag, Database, LifeBuoy, Megaphone, Search, Save, UserPlus, Loader2 } from "lucide-react";
+import { Settings, Users, Shield, Tag, Database, LifeBuoy, Megaphone, Search, Save, UserPlus, Loader2, KeyRound } from "lucide-react";
 import { CategoriesTab } from "@/features/setup/CategoriesTab";
 import { useTicketCategories } from "@/lib/setup-data";
 import { HelpdeskTab } from "@/features/setup/HelpdeskTab";
@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
 import { createUserAsAdmin } from "@/lib/admin-users-browser";
+import { requestPasswordReset } from "@/lib/password-reset.functions";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -106,6 +107,22 @@ function UsersTab() {
     qc.invalidateQueries({ queryKey: ["admin_users"] });
   };
 
+  const [resetting, setResetting] = React.useState<string | null>(null);
+
+  const sendReset = async (userId: string, email: string) => {
+    setResetting(userId);
+    try {
+      await requestPasswordReset({ data: { email } });
+      toast.success(`Password link sent to ${email}`, {
+        description: "The link works once and expires in 10 minutes.",
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the email.");
+    } finally {
+      setResetting(null);
+    }
+  };
+
   const rows = (data ?? []).filter((u) => {
     if (!q.trim()) return true;
     const s = q.toLowerCase();
@@ -142,11 +159,12 @@ function UsersTab() {
                 <TableHead>Line manager</TableHead>
                 <TableHead>Last sign-in</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead className="text-right">Password</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">Loading…</TableCell></TableRow>}
-              {!isLoading && rows.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">No users.</TableCell></TableRow>}
+              {isLoading && <TableRow><TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-6">Loading…</TableCell></TableRow>}
+              {!isLoading && rows.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-6">No users.</TableCell></TableRow>}
               {rows.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
@@ -182,6 +200,21 @@ function UsersTab() {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {u.user_created_at ? format(new Date(u.user_created_at), "PP") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resetting === u.id}
+                      onClick={() => sendReset(u.id, u.email)}
+                    >
+                      {resetting === u.id ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <KeyRound className="h-4 w-4 mr-2" />
+                      )}
+                      Reset password
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
