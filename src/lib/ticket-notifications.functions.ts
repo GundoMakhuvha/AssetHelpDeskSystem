@@ -11,6 +11,9 @@ const schema = z.object({
 
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/resend';
 
+/** New ticket alerts go to the service desk mailboxes, not to every admin account. */
+const NEW_TICKET_RECIPIENTS = ['servicedesk@tippfocus.co.za'];
+
 function serverSecret(name: string): string {
   return (process.env[name] ?? '').trim().replace(/^['"]|['"]$/g, '');
 }
@@ -238,7 +241,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
             intro: 'Thanks — our IT team has received your request and will be in touch shortly.',
           }),
         );
-      const alertList = [...staffEmails, managerEmail].filter(
+      const alertList = [...NEW_TICKET_RECIPIENTS, managerEmail].filter(
         (e): e is string => !!e && e !== requestorEmail,
       );
       if (alertList.length)
