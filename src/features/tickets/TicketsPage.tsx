@@ -84,6 +84,11 @@ export function TicketsPage() {
     queryKey: ["profiles"],
     queryFn: async () => (await supabase.from("profiles").select("*")).data as Profile[] | null,
   });
+  const { data: adminIds } = useQuery({
+    queryKey: ["admin-ids"],
+    queryFn: async () => ((await supabase.from("user_roles").select("user_id").eq("role", "admin")).data ?? []).map((r: any) => r.user_id as string),
+  });
+  const admins = (profiles ?? []).filter((p) => (adminIds ?? []).includes(p.id));
 
   const { data: catSlas } = useQuery({
     queryKey: ["sla_category_policies"],
@@ -379,7 +384,7 @@ export function TicketsPage() {
                 <SelectTrigger className="w-[170px] h-8"><SelectValue placeholder="Assign to…" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Unassigned</SelectItem>
-                  {(profiles ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}</SelectItem>)}
+                  {admins.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select onValueChange={(v) => bulkUpdate({ status: v, ...(v === "Resolved" ? { resolved_at: new Date().toISOString() } : {}) }, "updated")}>
@@ -414,6 +419,7 @@ export function TicketsPage() {
           <TicketDetail
             ticket={active}
             profiles={profiles ?? []}
+            admins={admins}
             isStaff={isStaff}
             dueAt={dueAt}
             onChanged={() => { qc.invalidateQueries({ queryKey: ["tickets"] }); }}
@@ -679,8 +685,8 @@ function NewTicketDialog({ onSaved }: { onSaved: () => void }) {
 }
 
 function TicketDetail({
-  ticket, profiles, isStaff, dueAt, onChanged,
-}: { ticket: Ticket; profiles: Profile[]; isStaff: boolean; dueAt: (t: Ticket) => Date; onChanged: () => void }) {
+  ticket, profiles, admins, isStaff, dueAt, onChanged,
+}: { ticket: Ticket; profiles: Profile[]; admins: Profile[]; isStaff: boolean; dueAt: (t: Ticket) => Date; onChanged: () => void }) {
   const { user } = useAuth();
   const [status, setStatus] = React.useState<TicketStatus>(ticket.status);
   const [priority, setPriority] = React.useState<TicketPriority>(ticket.priority);
@@ -868,7 +874,7 @@ function TicketDetail({
                     <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Unassigned</SelectItem>
-                      {profiles.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}</SelectItem>)}
+                      {admins.map((p) => <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
