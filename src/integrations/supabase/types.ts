@@ -689,6 +689,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_password_reset_token: {
+        Args: { _email: string }
+        Returns: string
+      }
       admin_create_setup_token: {
         Args: { _email: string; _temp_password: string; _user_id: string }
         Returns: string

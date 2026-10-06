@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
 import { createUserAsAdmin } from "@/lib/admin-users-browser";
-import { requestPasswordReset } from "@/lib/password-reset.functions";
+import { adminSendPasswordReset } from "@/lib/password-reset.functions";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -112,9 +112,9 @@ function UsersTab() {
   const sendReset = async (userId: string, email: string) => {
     setResetting(userId);
     try {
-      await requestPasswordReset({ data: { email } });
+      await adminSendPasswordReset({ data: { email } });
       toast.success(`Password link sent to ${email}`, {
-        description: "The link works once and expires in 10 minutes.",
+        description: "The link works once and expires in 7 days.",
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the email.");
