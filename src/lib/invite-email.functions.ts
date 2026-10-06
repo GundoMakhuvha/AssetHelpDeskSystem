@@ -1,3 +1,4 @@
+import { ORG } from '@/lib/org-config';
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
@@ -24,7 +25,7 @@ export const sendInviteEmail = createServerFn({ method: 'POST' })
       badgeFg: '#0b2f52',
       title: `Welcome, ${data.full_name}`,
       intro:
-        'An account has been created for you on the Tipp Focus Asset Management & Help Desk system. Choose your own password to get started.',
+        `An account has been created for you on the ${ORG.name} ${ORG.productName} system. Choose your own password to get started.`,
       bodyHtml: `<p style="margin:0;font:400 13px/1.6 Arial,Helvetica,sans-serif;color:#4b5563">
         Sign-in email: <strong>${escapeHtml(data.email)}</strong><br/>
         This link can be used once and expires in 7 days.
@@ -33,6 +34,6 @@ export const sendInviteEmail = createServerFn({ method: 'POST' })
       ctaHref: data.link,
     });
 
-    await sendMail([data.email], 'Create your Tipp Focus Help Desk password', html);
+    await sendMail([data.email], `Create your ${ORG.helpdeskName} password`, html);
     return { sent: true };
   });

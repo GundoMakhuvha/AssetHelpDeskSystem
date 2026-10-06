@@ -25,8 +25,15 @@ function resolveUrl(): string {
 
 export function createAdminClient() {
   const url = resolveUrl();
-  const serviceKey = clean(process.env['SUPABASE_SERVICE_ROLE_KEY']);
-  if (!serviceKey) throw new Error('Server credentials are not configured.');
+  const serviceKey =
+    clean(process.env['SUPABASE_SERVICE_ROLE_KEY']) ||
+    clean(process.env['SUPABASE_SECRET_KEY']) ||
+    clean(process.env['SERVICE_ROLE_KEY']);
+  if (!serviceKey) {
+    throw new Error(
+      'Server credentials are not configured (SUPABASE_SERVICE_ROLE_KEY missing on this deployment).',
+    );
+  }
 
   return createClient<Database>(url, serviceKey, {
     auth: { storage: undefined, persistSession: false, autoRefreshToken: false },

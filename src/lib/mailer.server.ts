@@ -1,3 +1,4 @@
+import { ORG, EMAIL_COLORS } from '@/lib/org-config';
 function secret(name: string): string {
   return (process.env[name] ?? '').trim().replace(/^['"]|['"]$/g, '');
 }
@@ -5,7 +6,7 @@ function secret(name: string): string {
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/resend';
 
 export function fromAddress() {
-  return secret('RESEND_FROM') || 'Tipp Focus Help Desk <helpdesk@capvtal.com>';
+  return secret('RESEND_FROM') || `${ORG.helpdeskName} <helpdesk@capvtal.com>`;
 }
 
 export async function sendMail(to: string[], subject: string, html: string) {
@@ -64,12 +65,12 @@ export function brandLayout(opts: {
 <div style="margin:0;padding:24px 12px;background:#f4f6f9">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
     <tr>
-      <td style="background:#0b2f52;padding:20px 24px">
-        <div style="font:700 18px/1.2 Arial,Helvetica,sans-serif;color:#ffffff;letter-spacing:.04em">TIPP FOCUS</div>
-        <div style="font:600 11px/1.4 Arial,Helvetica,sans-serif;color:#9dc2e6;letter-spacing:.14em;margin-top:2px">HELP DESK</div>
+      <td style="background:${EMAIL_COLORS.header};padding:20px 24px">
+        <div style="font:700 18px/1.2 Arial,Helvetica,sans-serif;color:#ffffff;letter-spacing:.04em">${escapeHtml(ORG.shortName)}</div>
+        <div style="font:600 11px/1.4 Arial,Helvetica,sans-serif;color:${EMAIL_COLORS.sub};letter-spacing:.14em;margin-top:2px">HELP DESK</div>
       </td>
     </tr>
-    <tr><td style="height:3px;background:#1d9e75;font-size:0;line-height:0">&nbsp;</td></tr>
+    <tr><td style="height:3px;background:${EMAIL_COLORS.stripe};font-size:0;line-height:0">&nbsp;</td></tr>
     <tr>
       <td style="padding:24px 24px 8px">
         <span style="display:inline-block;background:${opts.badgeBg};color:${opts.badgeFg};font:700 10px/1 Arial,Helvetica,sans-serif;letter-spacing:.1em;padding:7px 10px;border-radius:999px">${esc(opts.badgeLabel)}</span>
@@ -81,13 +82,13 @@ export function brandLayout(opts: {
     ${
       opts.ctaHref
         ? `<tr><td style="padding:20px 24px 4px">
-        <a href="${opts.ctaHref}" style="display:inline-block;background:#0b2f52;color:#ffffff;text-decoration:none;font:700 13px/1 Arial,Helvetica,sans-serif;padding:13px 22px;border-radius:8px">${esc(opts.ctaLabel ?? 'Open')}</a>
+        <a href="${opts.ctaHref}" style="display:inline-block;background:${EMAIL_COLORS.button};color:#ffffff;text-decoration:none;font:700 13px/1 Arial,Helvetica,sans-serif;padding:13px 22px;border-radius:8px">${esc(opts.ctaLabel ?? 'Open')}</a>
       </td></tr>`
         : ''
     }
     <tr>
       <td style="padding:20px 24px 24px">
-        <p style="margin:0;font:400 11px/1.5 Arial,Helvetica,sans-serif;color:#9aa1aa">Tipp Focus Help Desk &middot; This is an automated message</p>
+        <p style="margin:0;font:400 11px/1.5 Arial,Helvetica,sans-serif;color:#9aa1aa">${escapeHtml(ORG.helpdeskName)} &middot; This is an automated message</p>
       </td>
     </tr>
   </table>

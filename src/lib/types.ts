@@ -22,6 +22,8 @@ export const ROLES_ASSET_READ: AppRole[] = ["admin", "technician", "asset_manage
 export const ROLES_ASSET_WRITE: AppRole[] = ["admin", "technician", "asset_manager"];
 export const ROLES_HELPDESK: AppRole[] = ["admin", "technician", "helpdesk_agent", "requestor", "viewer"];
 export const ROLES_HELPDESK_AGENT: AppRole[] = ["admin", "technician", "helpdesk_agent"];
+// Roles allowed to see the Dashboard overview tab (excludes requestors).
+export const ROLES_DASHBOARD: AppRole[] = ["admin", "technician", "asset_manager", "asset_viewer", "helpdesk_agent", "viewer"];
 
 export type Department = "CSS" | "Finance" | "IT" | "Facilities" | "Tipp Con";
 export const DEPARTMENTS: Department[] = ["CSS", "Finance", "IT", "Facilities", "Tipp Con"];

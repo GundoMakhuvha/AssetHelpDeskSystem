@@ -1,12 +1,12 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// Defaults for the Tipp Focus Supabase project (publishable keys — safe in client code).
-const DEFAULT_URL = "https://jsifsskhbyrgbmsdezqs.supabase.co";
-const DEFAULT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzaWZzc2toYnlyZ2Jtc2RlenFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NzAxOTIsImV4cCI6MjA5MzU0NjE5Mn0.ZHodmo_0A-VXO4H4uZxz6QOpnkTdAuyZSEZfPkrt-QI";
-
-const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_URL;
-const anonKey =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_ANON_KEY;
+// Backend connection comes only from environment variables (see .env.example).
+const url = ((import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "").trim();
+const anonKey = (
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
+  ""
+).trim();
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
