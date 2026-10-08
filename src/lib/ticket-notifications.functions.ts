@@ -24,7 +24,7 @@ function serverSecret(name: string): string {
 
 function fromAddress() {
   const configured = serverSecret('RESEND_FROM');
-  return configured || `${ORG.helpdeskName} <helpdesk@capvtal.com>`;
+  return configured || `${ORG.helpdeskName} <helpdesk@tippfocus.co.za>`;
 }
 
 function appUrl(path: string) {
