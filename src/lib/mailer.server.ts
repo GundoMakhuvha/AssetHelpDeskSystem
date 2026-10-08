@@ -6,7 +6,7 @@ function secret(name: string): string {
 const GATEWAY_URL = 'https://connector-gateway.lovable.dev/resend';
 
 export function fromAddress() {
-  return secret('RESEND_FROM') || `${ORG.helpdeskName} <helpdesk@capvtal.com>`;
+  return secret('RESEND_FROM') || `${ORG.helpdeskName} <helpdesk@tippfocus.co.za>`;
 }
 
 export async function sendMail(to: string[], subject: string, html: string) {
