@@ -24,7 +24,7 @@ import { DataTab } from "@/features/setup/DataTab";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
+import { DEPARTMENTS, PRIORITIES, type TicketPriority, type TicketCategoryRow } from "@/lib/types";
 import type { AdminUserRow, AppRole } from "@/lib/types";
 import { createUserAsAdmin } from "@/lib/admin-users-browser";
 import { adminSendPasswordReset } from "@/lib/password-reset.functions";
@@ -303,9 +303,17 @@ function AddUserDialog({ users }: { users: AdminUserRow[] }) {
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="nu-dept">Department (optional)</Label>
-            <Input id="nu-dept" value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })} />
+            <Label>Department (optional)</Label>
+            <Select
+              value={form.department || "none"}
+              onValueChange={(v) => setForm({ ...form, department: v === "none" ? "" : v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No department</SelectItem>
+                {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label>Line manager</Label>

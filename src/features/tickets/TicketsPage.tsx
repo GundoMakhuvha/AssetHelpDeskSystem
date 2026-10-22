@@ -33,6 +33,10 @@ import { runSlaBreachWarnings } from "@/lib/sla-alerts.functions";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  AttachmentList, FilePicker, legacyPath, displayName, recordAttachments, uploadFiles,
+  useAttachmentCounts, useTicketAttachments,
+} from "./attachments";
 
 interface SlaRow {
   priority: TicketPriority;
@@ -469,6 +473,7 @@ function TicketTable({
   sort: { key: SortKey; dir: "asc" | "desc" };
   toggleSort: (k: SortKey) => void;
 }) {
+  const { data: attCounts } = useAttachmentCounts();
   const allChecked = tickets.length > 0 && selected.length === tickets.length;
   const SortHead = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
     <TableHead className={className}>
@@ -551,7 +556,10 @@ function TicketTable({
                       <div className="font-medium truncate">{t.title}</div>
                       <div className="text-xs text-muted-foreground truncate">
                         {t.category} · {t.department ?? "No department"} · raised {format(new Date(t.created_at), "dd MMM yyyy, HH:mm")}
-                        {t.attachment_url ? " · 1 attachment" : ""}
+                        {(() => {
+                          const n = attCounts?.[t.id] ?? (t.attachment_url ? 1 : 0);
+                          return n ? ` · ${n} attachment${n === 1 ? "" : "s"}` : "";
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -584,28 +592,25 @@ function NewTicketDialog({ onSaved }: { onSaved: () => void }) {
   const [category, setCategory] = React.useState<TicketCategory>("Other");
   const [priority, setPriority] = React.useState<TicketPriority>("Medium");
   const [department, setDepartment] = React.useState<Department>("IT");
-  const [file, setFile] = React.useState<File | null>(null);
+  const [files, setFiles] = React.useState<File[]>([]);
   const [busy, setBusy] = React.useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setBusy(true);
-    let attachment_url: string | null = null;
-    if (file) {
-      const path = `${user.id}/${Date.now()}-${file.name}`;
-      const up = await supabase.storage.from("ticket-attachments").upload(path, file);
-      if (up.error) { setBusy(false); return toast.error(up.error.message); }
-      const pub = supabase.storage.from("ticket-attachments").getPublicUrl(path);
-      attachment_url = pub.data.publicUrl;
-    }
+    // Upload first; the first file's storage path is also kept on the ticket
+    // so older screens still see an attachment.
+    const uploaded = files.length ? await uploadFiles(files, user.id) : [];
+    if (files.length && uploaded.length === 0) { setBusy(false); return; }
     const { data: inserted, error } = await supabase.from("tickets").insert({
-      title, description, category, priority, department,
-      submitted_by: user.id, attachment_url,
+      title: title.trim(), description, category, priority, department,
+      submitted_by: user.id, attachment_url: uploaded[0]?.path ?? null,
       assigned_to: settings?.default_assignee ?? null,
     }).select("id").single();
+    if (error) { setBusy(false); return toast.error(error.message); }
+    if (inserted?.id) await recordAttachments({ ticketId: inserted.id, userId: user.id, uploaded });
     setBusy(false);
-    if (error) return toast.error(error.message);
     toast.success("Ticket created");
     if (inserted?.id) {
       sendTicketNotificationEmail({ data: { ticketId: inserted.id, event: "created" } }).catch((e: any) => toast.error("Email notification failed: " + (e?.message ?? e)));
@@ -673,9 +678,10 @@ function NewTicketDialog({ onSaved }: { onSaved: () => void }) {
           </div>
         </div>
         {settings?.allow_attachments !== false && (
-          <div>
-            <Label>Attachment (optional)</Label>
-            <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <div className="space-y-1">
+            <Label>Attachments (optional)</Label>
+            <p className="text-[11px] text-muted-foreground">Screenshots, photos, PDFs or Office documents — several files allowed.</p>
+            <FilePicker files={files} onChange={setFiles} />
           </div>
         )}
         <DialogFooter><Button type="submit" disabled={busy}>{busy ? "Creating…" : "Create ticket"}</Button></DialogFooter>
@@ -693,6 +699,10 @@ function TicketDetail({
   const [assignee, setAssignee] = React.useState<string>(ticket.assigned_to ?? "__none__");
   const [body, setBody] = React.useState("");
   const [internal, setInternal] = React.useState(false);
+  const [replyFiles, setReplyFiles] = React.useState<File[]>([]);
+  const [posting, setPosting] = React.useState(false);
+  const { data: settings } = useHelpdeskSettings();
+  const { data: attachments, refetch: refetchAttachments } = useTicketAttachments(ticket.id);
 
   const { data: comments, refetch } = useQuery({
     queryKey: ["comments", ticket.id],
@@ -723,14 +733,31 @@ function TicketDetail({
   };
 
   const addComment = async () => {
-    if (!body.trim() || !user) return;
-    const text = body;
+    if ((!body.trim() && replyFiles.length === 0) || !user || posting) return;
+    setPosting(true);
+    const filesToSend = replyFiles;
+    const uploaded = filesToSend.length ? await uploadFiles(filesToSend, `${user.id}/${ticket.id}`) : [];
+    if (filesToSend.length && uploaded.length === 0) { setPosting(false); return; }
+    const fileNote = uploaded.length
+      ? `Attached ${uploaded.length === 1 ? uploaded[0].file.name : `${uploaded.length} files`}`
+      : "";
+    const text = body.trim() ? body : fileNote;
     const wasInternal = internal;
-    const { error } = await supabase.from("ticket_comments").insert({
+    const insert = supabase.from("ticket_comments").insert({
       ticket_id: ticket.id, author_id: user.id, body: text, is_internal: wasInternal,
     });
-    if (error) return toast.error(error.message);
-    setBody(""); setInternal(false); refetch();
+    const { data: inserted, error } = uploaded.length
+      ? await insert.select("id").single()
+      : await insert;
+    if (error) { setPosting(false); return toast.error(error.message); }
+    if (uploaded.length) {
+      await recordAttachments({
+        ticketId: ticket.id, userId: user.id, uploaded, commentId: (inserted as { id: string } | null)?.id,
+      });
+      refetchAttachments();
+    }
+    setPosting(false);
+    setBody(""); setInternal(false); setReplyFiles([]); refetch();
 
     // Notify anyone mentioned with "@Name" in the reply.
     const mentioned = profiles.filter((p) => {
@@ -765,6 +792,17 @@ function TicketDetail({
   };
 
   const visibleComments = (comments ?? []).filter((c) => isStaff || !c.is_internal);
+  const allowFiles = settings?.allow_attachments !== false;
+  const toChip = (a: { storage_path: string; file_name: string; mime_type: string | null; size_bytes: number | null }) => ({
+    path: a.storage_path, name: a.file_name, mime: a.mime_type, size: a.size_bytes,
+  });
+  const ticketFiles = (attachments ?? []).filter((a) => !a.comment_id).map(toChip);
+  const legacy = legacyPath(ticket.attachment_url);
+  if (legacy && !(attachments ?? []).some((a) => a.storage_path === legacy)) {
+    ticketFiles.unshift({ path: legacy, name: displayName(legacy), mime: null, size: null });
+  }
+  const filesFor = (commentId: string) =>
+    (attachments ?? []).filter((a) => a.comment_id === commentId).map(toChip);
   const nameOf = (id: string | null) => {
     if (!id) return "Unassigned";
     const p = profiles.find((x) => x.id === id);
@@ -801,22 +839,28 @@ function TicketDetail({
 
         <TabsContent value="conversation" className="space-y-3 pt-3">
           <Card><CardContent className="pt-6 text-sm whitespace-pre-wrap">{ticket.description || "No description provided."}</CardContent></Card>
-          {ticket.attachment_url && (
-            <a href={ticket.attachment_url} target="_blank" rel="noreferrer"
-               className="inline-flex items-center text-sm text-primary hover:underline">
-              <Paperclip className="h-4 w-4 mr-1" /> Attachment
-            </a>
+          {ticketFiles.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Paperclip className="h-3.5 w-3.5" /> Attachments — click to open in a new tab
+              </div>
+              <AttachmentList items={ticketFiles} />
+            </div>
           )}
           {visibleComments.length === 0 && <p className="text-sm text-muted-foreground">No replies yet.</p>}
-          {visibleComments.map((c) => (
-            <div key={c.id} className={`p-3 rounded-md text-sm ${c.is_internal ? "bg-warning/10 border border-warning/30" : "bg-muted"}`}>
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>{nameOf(c.author_id)} {c.is_internal && "· internal note"}</span>
-                <span>{format(new Date(c.created_at), "PPp")}</span>
+          {visibleComments.map((c) => {
+            const files = filesFor(c.id);
+            return (
+              <div key={c.id} className={`p-3 rounded-md text-sm ${c.is_internal ? "bg-warning/10 border border-warning/30" : "bg-muted"}`}>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>{nameOf(c.author_id)} {c.is_internal && "· internal note"}</span>
+                  <span>{format(new Date(c.created_at), "PPp")}</span>
+                </div>
+                <div className="whitespace-pre-wrap">{c.body}</div>
+                {files.length > 0 && <div className="mt-2"><AttachmentList items={files} /></div>}
               </div>
-              <div className="whitespace-pre-wrap">{c.body}</div>
-            </div>
-          ))}
+            );
+          })}
           <MentionTextarea
             value={body}
             onChange={setBody}
@@ -824,13 +868,18 @@ function TicketDetail({
             rows={3}
             placeholder="Write a reply… type @ to mention someone"
           />
-          <div className="flex items-center justify-between">
-            {isStaff ? (
-              <label className="flex items-center gap-2 text-xs">
-                <Switch checked={internal} onCheckedChange={setInternal} /> Internal note (hidden from requester)
-              </label>
-            ) : <span />}
-            <Button onClick={addComment} disabled={!body.trim()}>Post reply</Button>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="space-y-2">
+              {allowFiles && <FilePicker files={replyFiles} onChange={setReplyFiles} compact />}
+              {isStaff && (
+                <label className="flex items-center gap-2 text-xs">
+                  <Switch checked={internal} onCheckedChange={setInternal} /> Internal note (hidden from requester)
+                </label>
+              )}
+            </div>
+            <Button onClick={addComment} disabled={posting || (!body.trim() && replyFiles.length === 0)}>
+              {posting ? "Posting…" : "Post reply"}
+            </Button>
           </div>
         </TabsContent>
 

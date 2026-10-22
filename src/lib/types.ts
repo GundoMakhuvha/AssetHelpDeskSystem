@@ -25,8 +25,19 @@ export const ROLES_HELPDESK_AGENT: AppRole[] = ["admin", "technician", "helpdesk
 // Roles allowed to see the Dashboard overview tab (excludes requestors).
 export const ROLES_DASHBOARD: AppRole[] = ["admin", "technician", "asset_manager", "asset_viewer", "helpdesk_agent", "viewer"];
 
-export type Department = "CSS" | "Finance" | "IT" | "Facilities" | "Tipp Con";
-export const DEPARTMENTS: Department[] = ["CSS", "Finance", "IT", "Facilities", "Tipp Con"];
+// Department names must match the public.department_t enum in the database.
+// A deployment can override the list with VITE_ORG_DEPARTMENTS (comma-separated).
+export type Department = string;
+const DEFAULT_DEPARTMENTS: Department[] = [
+  "CSS", "Finance", "IT", "Facilities", "Tipp Con", "Tipp Academy", "Resourcing",
+];
+const envDepartments = String(
+  (import.meta.env as Record<string, string | undefined>).VITE_ORG_DEPARTMENTS ?? "",
+)
+  .split(",")
+  .map((d) => d.trim())
+  .filter(Boolean);
+export const DEPARTMENTS: Department[] = envDepartments.length ? envDepartments : DEFAULT_DEPARTMENTS;
 
 export type AssetCondition = "Good" | "Fair" | "Poor" | "Damaged";
 export const CONDITIONS: AssetCondition[] = ["Good", "Fair", "Poor", "Damaged"];
@@ -175,5 +186,17 @@ export interface TicketComment {
   author_id: string;
   body: string;
   is_internal: boolean;
+  created_at: string;
+}
+
+export interface TicketAttachment {
+  id: string;
+  ticket_id: string;
+  comment_id: string | null;
+  storage_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
   created_at: string;
 }
