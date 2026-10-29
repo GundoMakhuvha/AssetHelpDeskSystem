@@ -39,7 +39,7 @@ export function HelpdeskTab() {
   const { data: staff } = useQuery({
     queryKey: ["profiles", "all"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id, full_name, email, department, created_at");
+      const { data, error } = await supabase.from("profiles").select("id, full_name, email, department, created_at").is("deleted_at", null);
       if (error) throw error;
       return (data ?? []) as Profile[];
     },

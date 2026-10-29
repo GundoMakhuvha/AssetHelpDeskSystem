@@ -15,7 +15,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Users, Shield, Tag, Database, LifeBuoy, Megaphone, Search, Save, UserPlus, Loader2, KeyRound } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Settings, Users, Shield, Tag, Database, LifeBuoy, Megaphone, Search, Save, UserPlus, Loader2, KeyRound, Trash2 } from "lucide-react";
 import { CategoriesTab } from "@/features/setup/CategoriesTab";
 import { useTicketCategories } from "@/lib/setup-data";
 import { HelpdeskTab } from "@/features/setup/HelpdeskTab";
@@ -79,6 +83,7 @@ export function SetupPage() {
 
 function UsersTab() {
   const qc = useQueryClient();
+  const { user: me } = useAuth();
   const [q, setQ] = React.useState("");
 
   const { data, isLoading } = useQuery({
@@ -105,6 +110,34 @@ function UsersTab() {
     if (error) return toast.error(error.message);
     toast.success("Role updated");
     qc.invalidateQueries({ queryKey: ["admin_users"] });
+  };
+
+  const setDepartment = async (userId: string, department: string) => {
+    const { error } = await supabase.rpc("admin_set_department" as never, {
+      _user_id: userId,
+      _department: department === "none" ? null : department,
+    } as never);
+    if (error) return toast.error(error.message);
+    toast.success("Department updated");
+    qc.invalidateQueries({ queryKey: ["admin_users"] });
+    qc.invalidateQueries({ queryKey: ["profiles"] });
+  };
+
+  const [toDelete, setToDelete] = React.useState<AdminUserRow | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const deleteUser = async () => {
+    if (!toDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.rpc("admin_delete_user" as never, { _user_id: toDelete.id } as never);
+    setDeleting(false);
+    if (error) return toast.error(error.message);
+    toast.success(`${toDelete.full_name ?? toDelete.email} has been deleted`, {
+      description: "They can no longer sign in. Their past tickets and history are kept.",
+    });
+    setToDelete(null);
+    qc.invalidateQueries({ queryKey: ["admin_users"] });
+    qc.invalidateQueries({ queryKey: ["profiles"] });
   };
 
   const [resetting, setResetting] = React.useState<string | null>(null);
@@ -135,7 +168,7 @@ function UsersTab() {
         <div>
           <CardTitle>Users & Roles</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            {data?.length ?? 0} users · change role to grant or revoke access.
+            {data?.length ?? 0} users · change role, department or line manager; delete people who have left.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -159,7 +192,7 @@ function UsersTab() {
                 <TableHead>Line manager</TableHead>
                 <TableHead>Last sign-in</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="text-right">Password</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -169,7 +202,18 @@ function UsersTab() {
                 <TableRow key={u.id}>
                   <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
                   <TableCell className="text-sm">{u.email}</TableCell>
-                  <TableCell className="text-sm">{u.department ?? "—"}</TableCell>
+                  <TableCell>
+                    <Select value={u.department ?? "none"} onValueChange={(v) => setDepartment(u.id, v)}>
+                      <SelectTrigger className="w-[150px]"><SelectValue placeholder="No department" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No department</SelectItem>
+                        {u.department && !DEPARTMENTS.includes(u.department) && (
+                          <SelectItem value={u.department}>{u.department}</SelectItem>
+                        )}
+                        {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <Select value={u.role ?? "viewer"} onValueChange={(v) => setRole(u.id, v as AppRole)}>
                       <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
@@ -202,19 +246,32 @@ function UsersTab() {
                     {u.user_created_at ? format(new Date(u.user_created_at), "PP") : "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={resetting === u.id}
-                      onClick={() => sendReset(u.id, u.email)}
-                    >
-                      {resetting === u.id ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <KeyRound className="h-4 w-4 mr-2" />
-                      )}
-                      Reset password
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={resetting === u.id}
+                        onClick={() => sendReset(u.id, u.email)}
+                      >
+                        {resetting === u.id ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <KeyRound className="h-4 w-4 mr-2" />
+                        )}
+                        Reset password
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        disabled={u.id === me?.id}
+                        title={u.id === me?.id ? "You cannot delete your own account" : "Delete user"}
+                        aria-label={`Delete ${u.full_name ?? u.email}`}
+                        onClick={() => setToDelete(u)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -222,6 +279,38 @@ function UsersTab() {
           </Table>
         </div>
       </CardContent>
+
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => { if (!o && !deleting) setToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {toDelete?.full_name ?? toDelete?.email}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Use this for employees who have left the organisation. <strong>{toDelete?.email}</strong> will
+                  be signed out and can no longer sign in. This cannot be undone.
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Tickets they logged, their comments and asset history are kept.</li>
+                  <li>Open tickets assigned to them go back to the unassigned queue.</li>
+                  <li>Anyone who reports to them will have no line manager.</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => { e.preventDefault(); void deleteUser(); }}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete user
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

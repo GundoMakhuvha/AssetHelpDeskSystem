@@ -51,7 +51,7 @@ export function AssetRegister() {
   const { data: profiles } = useQuery({
     queryKey: ["profiles"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name, email, department");
+      const { data } = await supabase.from("profiles").select("id, full_name, email, department, deleted_at");
       return (data ?? []) as Profile[];
     },
   });
@@ -291,8 +291,8 @@ function AssetFormDialog({
             <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>None</SelectItem>
-              {profiles.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}</SelectItem>
+              {profiles.filter((p) => !p.deleted_at || p.id === form.reallocated_to).map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.email}{p.deleted_at ? " (deleted)" : ""}</SelectItem>
               ))}
             </SelectContent>
           </Select>

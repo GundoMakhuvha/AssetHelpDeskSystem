@@ -111,6 +111,8 @@ export interface Profile {
   email: string;
   department: string | null;
   manager_id?: string | null;
+  /** Set when an admin deletes the user; the profile is kept for history. */
+  deleted_at?: string | null;
 }
 
 export interface Asset {

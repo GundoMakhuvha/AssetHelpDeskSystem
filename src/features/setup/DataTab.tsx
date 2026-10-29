@@ -44,7 +44,7 @@ export function DataTab() {
         supabase.from("assets").select("asset_id", { count: "exact", head: true }).eq("is_deleted", false),
         supabase.from("tickets").select("id", { count: "exact", head: true }),
         supabase.from("verifications").select("id", { count: "exact", head: true }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).is("deleted_at", null),
         supabase.from("activity_log" as never).select("id", { count: "exact", head: true }),
       ]);
       return {

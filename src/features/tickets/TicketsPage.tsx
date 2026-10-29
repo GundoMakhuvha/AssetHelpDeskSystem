@@ -761,6 +761,7 @@ function TicketDetail({
 
     // Notify anyone mentioned with "@Name" in the reply.
     const mentioned = profiles.filter((p) => {
+      if (p.deleted_at) return false;
       const name = p.full_name ?? p.email;
       return p.id !== user.id && text.toLowerCase().includes(`@${name.toLowerCase()}`);
     });
@@ -864,7 +865,7 @@ function TicketDetail({
           <MentionTextarea
             value={body}
             onChange={setBody}
-            people={profiles}
+            people={profiles.filter((p) => !p.deleted_at)}
             rows={3}
             placeholder="Write a reply… type @ to mention someone"
           />
