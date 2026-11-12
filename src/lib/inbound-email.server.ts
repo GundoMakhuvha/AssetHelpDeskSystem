@@ -90,6 +90,14 @@ export function stripQuotedReply(text: string): string {
   let cut = lines.length;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
+    // Gmail often wraps "On <date>, <name> <address>\nwrote:" over 2-3 lines.
+    if (/^\s*On\s/i.test(line)) {
+      const joined = lines.slice(i, i + 3).join(' ');
+      if (/^\s*On .{5,300}?wrote:/i.test(joined)) {
+        cut = i;
+        break;
+      }
+    }
     if (cutPatterns.some((re) => re.test(line))) {
       // "From:" only counts when it starts Outlook's header block.
       if (/^\s*From:/i.test(line)) {
