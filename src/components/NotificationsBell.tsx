@@ -59,7 +59,11 @@ export function NotificationsBell() {
   const open = async (n: AppNotification) => {
     if (!n.is_read) await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
     qc.invalidateQueries({ queryKey: ["notifications", user?.id] });
-    if (n.link) nav({ to: n.link });
+    if (n.link) {
+      const [path, query] = n.link.split("?");
+      const search = Object.fromEntries(new URLSearchParams(query ?? ""));
+      nav({ to: path, search: search as never });
+    }
   };
 
   return (

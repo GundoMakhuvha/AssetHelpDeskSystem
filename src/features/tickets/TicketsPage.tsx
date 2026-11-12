@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth-context";
 import { useTicketCategories, useHelpdeskSettings } from "@/lib/setup-data";
@@ -117,6 +118,18 @@ export function TicketsPage() {
       return (data ?? []) as Ticket[];
     },
   });
+
+  // Email links and notifications open a ticket directly: /tickets?ticket=<id>
+  const nav = useNavigate();
+  const ticketParam = useRouterState({
+    select: (st) => (st.location.search as Record<string, unknown>)?.ticket as string | undefined,
+  });
+  React.useEffect(() => {
+    if (!ticketParam || !tickets) return;
+    const t = tickets.find((x) => x.id === ticketParam);
+    if (t) setActive(t);
+    nav({ to: "/tickets", search: {} as never, replace: true });
+  }, [ticketParam, tickets, nav]);
 
   const slaMinutes = React.useCallback(
     (p: TicketPriority, category?: string) =>
@@ -784,6 +797,7 @@ function TicketDetail({
           authorName:
             profiles.find((p) => p.id === user.id)?.full_name ?? user.email ?? "A colleague",
           note: text.slice(0, 500),
+          internal: wasInternal,
         },
       }).catch((e: any) => toast.error("Mention email failed: " + (e?.message ?? e)));
     }
@@ -854,7 +868,7 @@ function TicketDetail({
             return (
               <div key={c.id} className={`p-3 rounded-md text-sm ${c.is_internal ? "bg-warning/10 border border-warning/30" : "bg-muted"}`}>
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{nameOf(c.author_id)} {c.is_internal && "· internal note"}</span>
+                  <span>{c.author_id ? nameOf(c.author_id) : (c.email_from ?? "Email sender")}{c.source === "email" && " · via email"} {c.is_internal && "· internal note"}</span>
                   <span>{format(new Date(c.created_at), "PPp")}</span>
                 </div>
                 <div className="whitespace-pre-wrap">{c.body}</div>

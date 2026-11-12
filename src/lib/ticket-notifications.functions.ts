@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import { z } from 'zod';
 import { appLink } from '@/lib/app-url';
+import { ticketReplyTo } from '@/lib/inbound-email.server';
 
 const schema = z.object({
   ticketId: z.string().uuid(),
@@ -31,7 +32,7 @@ function appUrl(path: string) {
   return appLink(path);
 }
 
-async function sendEmail(to: string[], subject: string, html: string) {
+async function sendEmail(to: string[], subject: string, html: string, replyTo?: string) {
   const lovableKey = serverSecret('LOVABLE_API_KEY');
   const resendKey = serverSecret('RESEND_API_KEY');
   if (!resendKey) {
@@ -50,7 +51,7 @@ async function sendEmail(to: string[], subject: string, html: string) {
         Authorization: `Bearer ${lovableKey}`,
         'X-Connection-Api-Key': resendKey,
       },
-      body: JSON.stringify({ from: fromAddress(), to, subject, html }),
+      body: JSON.stringify({ from: fromAddress(), to, subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     });
   } else {
     res = await fetch('https://api.resend.com/emails', {
@@ -59,7 +60,7 @@ async function sendEmail(to: string[], subject: string, html: string) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${resendKey}`,
       },
-      body: JSON.stringify({ from: fromAddress(), to, subject, html }),
+      body: JSON.stringify({ from: fromAddress(), to, subject, html, ...(replyTo ? { reply_to: replyTo } : {}) }),
     });
   }
   if (!res.ok) {
@@ -208,6 +209,9 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
     };
 
     const ref = `#${String(ticket.ticket_number ?? '').padStart(5, '0')}`;
+    // Replies to these emails come back to the ticket (see /api/inbound-email).
+    const replyTo = ticketReplyTo(data.ticketId);
+    const send = (to: string[], subject: string, html: string) => sendEmail(to, subject, html, replyTo);
     const requestorEmail = info.requestor_email;
     const assigneeEmail = info.assignee_email;
     const staffEmails = (info.staff_emails ?? []).filter(Boolean);
@@ -228,12 +232,12 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
       description: ticket.description ?? null,
       requester,
       assignee,
-      ctaHref: appUrl('/tickets'),
+      ctaHref: appUrl(`/tickets?ticket=${data.ticketId}`),
     };
 
     if (data.event === 'created') {
       if (requestorEmail)
-        await sendEmail(
+        await send(
           [requestorEmail],
           `We received your ticket ${ref}`,
           layout({
@@ -249,7 +253,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
         (e): e is string => !!e && e !== requestorEmail,
       );
       if (alertList.length)
-        await sendEmail(
+        await send(
           alertList,
           `New ticket ${ref}: ${ticket.title}`,
           layout({
@@ -264,7 +268,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
     }
 
     if (data.event === 'assigned' && assigneeEmail) {
-      await sendEmail(
+      await send(
         [assigneeEmail],
         `Ticket ${ref} assigned to you`,
         layout({
@@ -283,7 +287,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
       const to = [requestorEmail, assigneeEmail, managerEmail].filter(Boolean) as string[];
       const statusStyle = STATUS_STYLES[ticket.status ?? 'Open'] ?? STATUS_STYLES['Open']!;
       if (to.length)
-        await sendEmail(
+        await send(
           Array.from(new Set(to)),
           resolved ? `Ticket ${ref} resolved` : `Ticket ${ref} status: ${ticket.status}`,
           layout({
@@ -293,7 +297,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
             badgeFg: statusStyle.fg,
             title: resolved ? 'Your issue has been resolved' : 'Ticket status updated',
             intro: resolved
-              ? 'Our team has marked your ticket as resolved. Reply in the app if the issue persists.'
+              ? 'Our team has marked your ticket as resolved. Reply to this email or in the app if the issue persists.'
               : `The status of your ticket is now ${ticket.status}.`,
           }),
         );
@@ -302,7 +306,7 @@ export const sendTicketNotificationEmail = createServerFn({ method: 'POST' })
     if (data.event === 'comment') {
       const to = [requestorEmail, assigneeEmail, managerEmail].filter(Boolean) as string[];
       if (to.length)
-        await sendEmail(
+        await send(
           Array.from(new Set(to)),
           `New reply on ticket ${ref}`,
           layout({

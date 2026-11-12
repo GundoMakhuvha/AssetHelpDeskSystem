@@ -18,6 +18,7 @@ import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as VerifyRouteImport } from './routes/verify'
+import { Route as ApiInboundEmailRouteImport } from './routes/api/inbound-email'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -64,6 +65,11 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInboundEmailRoute = ApiInboundEmailRouteImport.update({
+  id: '/api/inbound-email',
+  path: '/api/inbound-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
+  '/api/inbound-email': typeof ApiInboundEmailRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
+  '/api/inbound-email': typeof ApiInboundEmailRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/tickets': typeof TicketsRoute
   '/verify': typeof VerifyRoute
+  '/api/inbound-email': typeof ApiInboundEmailRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/tickets'
     | '/verify'
+    | '/api/inbound-email'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/tickets'
     | '/verify'
+    | '/api/inbound-email'
   id:
     | '__root__'
     | '/'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/tickets'
     | '/verify'
+    | '/api/inbound-email'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -145,6 +157,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   TicketsRoute: typeof TicketsRoute
   VerifyRoute: typeof VerifyRoute
+  ApiInboundEmailRoute: typeof ApiInboundEmailRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -212,6 +225,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/inbound-email': {
+      id: '/api/inbound-email'
+      path: '/api/inbound-email'
+      fullPath: '/api/inbound-email'
+      preLoaderRoute: typeof ApiInboundEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -225,6 +245,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   TicketsRoute: TicketsRoute,
   VerifyRoute: VerifyRoute,
+  ApiInboundEmailRoute: ApiInboundEmailRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

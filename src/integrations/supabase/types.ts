@@ -490,27 +490,33 @@ export type Database = {
       }
       ticket_comments: {
         Row: {
-          author_id: string
+          author_id: string | null
           body: string
           created_at: string
+          email_from: string | null
           id: string
           is_internal: boolean
+          source: string
           ticket_id: string
         }
         Insert: {
-          author_id: string
+          author_id?: string | null
           body: string
           created_at?: string
+          email_from?: string | null
           id?: string
           is_internal?: boolean
+          source?: string
           ticket_id: string
         }
         Update: {
-          author_id?: string
+          author_id?: string | null
           body?: string
           created_at?: string
+          email_from?: string | null
           id?: string
           is_internal?: boolean
+          source?: string
           ticket_id?: string
         }
         Relationships: [

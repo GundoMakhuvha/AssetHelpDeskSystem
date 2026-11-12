@@ -185,9 +185,14 @@ export interface AdminUserRow {
 export interface TicketComment {
   id: string;
   ticket_id: string;
-  author_id: string;
+  /** Null when the reply came by email from someone without an account. */
+  author_id: string | null;
   body: string;
   is_internal: boolean;
+  /** "app" for replies typed in the help desk, "email" for email replies. */
+  source?: "app" | "email";
+  /** Sender address for email replies from people without an account. */
+  email_from?: string | null;
   created_at: string;
 }
 

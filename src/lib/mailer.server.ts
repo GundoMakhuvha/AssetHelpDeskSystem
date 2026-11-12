@@ -9,7 +9,12 @@ export function fromAddress() {
   return secret('RESEND_FROM') || `${ORG.helpdeskName} <helpdesk@tippfocus.co.za>`;
 }
 
-export async function sendMail(to: string[], subject: string, html: string) {
+export async function sendMail(
+  to: string[],
+  subject: string,
+  html: string,
+  opts: { replyTo?: string } = {},
+) {
   const recipients = Array.from(new Set(to.filter(Boolean)));
   if (recipients.length === 0) return;
 
@@ -21,7 +26,13 @@ export async function sendMail(to: string[], subject: string, html: string) {
     );
   }
 
-  const body = JSON.stringify({ from: fromAddress(), to: recipients, subject, html });
+  const body = JSON.stringify({
+    from: fromAddress(),
+    to: recipients,
+    subject,
+    html,
+    ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+  });
   const res = lovableKey
     ? await fetch(`${GATEWAY_URL}/emails`, {
         method: 'POST',
