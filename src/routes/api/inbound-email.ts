@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { createClient } from '@supabase/supabase-js';
 import {
   bareAddress,
   displayName,
@@ -24,17 +25,6 @@ type ReceivedEmail = {
   headers?: unknown;
 };
 
-type ReceivedAttachment = {
-  id: string;
-  filename?: string;
-  content_type?: string;
-  size?: number;
-  download_url?: string;
-  content_disposition?: string;
-};
-
-const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-const ATTACHMENT_BUCKET = 'ticket-attachments';
 
 const list = (v: string[] | string | undefined | null) => (Array.isArray(v) ? v : v ? [v] : []);
 const json = (body: unknown, status = 200) =>
@@ -62,31 +52,9 @@ export const Route = createFileRoute('/api/inbound-email')({
         }
         if (event.type !== 'email.received' || !event.data?.email_id) return json({ skipped: event.type ?? 'unknown' });
 
-        const { createAdminClient } = await import('@/lib/admin-client.server');
-        const admin = createAdminClient();
+        const db = publicClient();
+        if (!db) return json({ error: 'Supabase URL / publishable key not configured' }, 500);
         const emailId = event.data.email_id;
-
-        // Record first. The unique id makes Resend's retries harmless.
-        const { data: log, error: logError } = await admin
-          .from('inbound_emails' as never)
-          .insert({
-            resend_email_id: emailId,
-            from_address: event.data.from ?? null,
-            to_addresses: event.data.to ?? [],
-            subject: event.data.subject ?? null,
-          } as never)
-          .select('id')
-          .single();
-        if (logError) {
-          if ((logError as { code?: string }).code === '23505') return json({ duplicate: true });
-          console.error('inbound_emails insert failed', logError);
-          return json({ error: logError.message }, 500);
-        }
-        const logId = (log as { id: string }).id;
-        const finish = async (status: string, extra: Record<string, unknown> = {}) => {
-          await admin.from('inbound_emails' as never).update({ status, ...extra } as never).eq('id', logId);
-          return json({ status, ...extra });
-        };
 
         try {
           const email = await resendGet<ReceivedEmail>(`/emails/receiving/${emailId}`);
@@ -95,157 +63,113 @@ export const Route = createFileRoute('/api/inbound-email')({
           const sender = bareAddress(fromRaw);
           const recipients = [...list(email.to ?? event.data.to), ...list(email.cc)];
           const fullText = (email.text && email.text.trim()) || htmlToText(email.html ?? '');
-          const reply = stripQuotedReply(fullText);
+          let reply = stripQuotedReply(fullText);
 
-          await admin
-            .from('inbound_emails' as never)
-            .update({ body_text: fullText.slice(0, 50000) } as never)
-            .eq('id', logId);
-
-          if (isAutoReply(email.headers, subject)) return finish('ignored', { reason: 'automatic reply' });
+          // Attachments can't be stored without the service role key (Lovable
+          // Cloud), so their names are noted on the comment instead.
+          const files = (event.data as { attachments?: { filename?: string; content_disposition?: string }[] })
+            .attachments ?? [];
+          const names = files
+            .filter((f) => !(f.content_disposition ?? '').toLowerCase().startsWith('inline'))
+            .map((f) => f.filename)
+            .filter(Boolean);
+          if (names.length) reply += `\n\n[Attachments sent by email, not saved here: ${names.join(', ')}]`;
 
           const ownFrom = bareAddress(process.env['RESEND_FROM'] ?? '');
-          if (ownFrom && sender === ownFrom) return finish('ignored', { reason: 'sent by the help desk itself' });
-
-          // Who sent it? Staff and requesters have profiles; others are recorded by address.
-          const { data: profile } = await admin
-            .from('profiles')
-            .select('id, full_name, email')
-            .ilike('email', sender.replace(/[\\%_]/g, '\\$&'))
-            .maybeSingle();
-
-          // Which ticket? Prefer the Reply-To token; fall back to "#00065" in the
-          // subject, but only for senders who have an account.
+          const ignoreReason = isAutoReply(email.headers, subject)
+            ? 'automatic reply'
+            : ownFrom && sender === ownFrom
+              ? 'sent by the help desk itself'
+              : null;
           const token = ticketFromAddresses(recipients);
-          let ticket: { id: string; ticket_number: number; title: string; submitted_by: string | null; assigned_to: string | null } | null = null;
-          if (token) {
-            const { data } = await admin
-              .from('tickets')
-              .select('id, ticket_number, title, submitted_by, assigned_to')
-              .eq('id', token.ticketId)
-              .maybeSingle();
-            ticket = data;
-          } else if (profile) {
-            const num = ticketNumberFromSubject(subject);
-            if (num != null) {
-              const { data } = await admin
-                .from('tickets')
-                .select('id, ticket_number, title, submitted_by, assigned_to')
-                .eq('ticket_number', num)
-                .maybeSingle();
-              ticket = data;
+
+          const { data, error } = await db.rpc('ingest_inbound_email' as never, {
+            _secret: secret,
+            _resend_email_id: emailId,
+            _from: fromRaw,
+            _sender: sender,
+            _sender_name: displayName(fromRaw) ?? '',
+            _to: recipients,
+            _subject: subject,
+            _body_text: fullText,
+            _reply: reply,
+            _token_ticket_id: token?.ticketId ?? null,
+            _internal: token?.internal ?? false,
+            _subject_ticket_number: ticketNumberFromSubject(subject),
+            _ignore_reason: ignoreReason,
+          } as never);
+          if (error) throw new Error(`ingest_inbound_email: ${error.message}`);
+          const result = data as unknown as IngestResult;
+
+          if (result.status === 'linked') {
+            try {
+              await notifyByEmail(result, { senderEmail: sender, text: reply, internal: token?.internal ?? false });
+            } catch (e) {
+              console.error('Inbound reply notification failed', e);
             }
           }
-          if (!ticket) {
-            return finish('unmatched', {
-              reason: token ? 'ticket in reply address no longer exists' : 'no ticket reference found',
-            });
-          }
-
-          const { data: comment, error: commentError } = await admin
-            .from('ticket_comments')
-            .insert({
-              ticket_id: ticket.id,
-              author_id: profile?.id ?? null,
-              body: reply || '(empty email)',
-              is_internal: token?.internal ?? false,
-              source: 'email',
-              email_from: profile ? null : (displayName(fromRaw) ? `${displayName(fromRaw)} <${sender}>` : sender),
-            } as never)
-            .select('id')
-            .single();
-          if (commentError) throw new Error(commentError.message);
-          const commentId = (comment as { id: string }).id;
-
-          // Attachments (inline images such as signature logos are skipped).
-          let saved = 0;
-          try {
-            const res = await resendGet<{ data?: ReceivedAttachment[] } | ReceivedAttachment[]>(
-              `/emails/receiving/${emailId}/attachments`,
-            );
-            const files = Array.isArray(res) ? res : (res.data ?? []);
-            for (const f of files) {
-              if ((f.content_disposition ?? '').toLowerCase().startsWith('inline')) continue;
-              if (!f.download_url || (f.size ?? 0) > MAX_ATTACHMENT_BYTES) continue;
-              const dl = await fetch(f.download_url);
-              if (!dl.ok) continue;
-              const bytes = new Uint8Array(await dl.arrayBuffer());
-              const name = (f.filename || 'attachment').replace(/[^\w.\- ]+/g, '_').slice(0, 120);
-              const path = `email/${ticket.id}/${Date.now()}-${name}`;
-              const up = await admin.storage.from(ATTACHMENT_BUCKET).upload(path, bytes, {
-                contentType: f.content_type || undefined,
-              });
-              if (up.error) continue;
-              await admin.from('ticket_attachments' as never).insert({
-                ticket_id: ticket.id,
-                comment_id: commentId,
-                storage_path: path,
-                file_name: f.filename || name,
-                mime_type: f.content_type ?? null,
-                size_bytes: bytes.byteLength,
-                uploaded_by: profile?.id ?? null,
-              } as never);
-              saved++;
-            }
-          } catch (e) {
-            console.error('Inbound attachments failed', e);
-          }
-
-          // Let the requester and assignee know by email (not the person who replied).
-          try {
-            await notifyByEmail(admin, ticket, {
-              senderEmail: sender,
-              senderName: profile?.full_name ?? displayName(fromRaw) ?? sender,
-              text: reply,
-              internal: token?.internal ?? false,
-            });
-          } catch (e) {
-            console.error('Inbound reply notification failed', e);
-          }
-
-          return finish('linked', { ticket_id: ticket.id, comment_id: commentId, attachments: saved });
+          return json(result);
         } catch (e) {
           console.error('Inbound email processing failed', e);
-          return finish('error', { reason: String((e as Error)?.message ?? e).slice(0, 500) });
+          // 500 so Resend retries; the message shows in Resend's webhook log.
+          return json({ error: String((e as Error)?.message ?? e).slice(0, 500) }, 500);
         }
       },
     },
   },
 });
 
+type IngestResult = {
+  status: string;
+  ticket_id?: string;
+  ticket_number?: number;
+  ticket_title?: string;
+  comment_id?: string;
+  sender_name?: string;
+  requester_email?: string | null;
+  assignee_email?: string | null;
+};
+
+/** Public (publishable-key) client; the database function checks the shared secret. */
+function publicClient() {
+  const clean = (v: string | undefined) => (v ?? '').trim().replace(/^["']|["']$/g, '');
+  const url =
+    clean(import.meta.env.VITE_SUPABASE_URL as string | undefined) || clean(process.env['SUPABASE_URL']);
+  const key =
+    clean(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
+    clean(process.env['SUPABASE_PUBLISHABLE_KEY']) ||
+    clean(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
 async function notifyByEmail(
-  admin: ReturnType<typeof import('@/lib/admin-client.server').createAdminClient>,
-  ticket: { id: string; ticket_number: number; title: string; submitted_by: string | null; assigned_to: string | null },
-  opts: { senderEmail: string; senderName: string; text: string; internal: boolean },
+  r: IngestResult,
+  opts: { senderEmail: string; text: string; internal: boolean },
 ) {
   const { sendMail, brandLayout, escapeHtml } = await import('@/lib/mailer.server');
   const { appLink } = await import('@/lib/app-url');
 
   // Internal notes only go to the assignee, never the requester.
-  const ids = (opts.internal ? [ticket.assigned_to] : [ticket.submitted_by, ticket.assigned_to]).filter(
-    Boolean,
-  ) as string[];
-  if (!ids.length) return;
-  const { data: people } = await admin.from('profiles').select('email').in('id', ids);
-  const to = (people ?? [])
-    .map((p) => (p.email ?? '').toLowerCase())
+  const to = (opts.internal ? [r.assignee_email] : [r.requester_email, r.assignee_email])
+    .map((e) => (e ?? '').toLowerCase())
     .filter((e) => e && e !== opts.senderEmail);
-  if (!to.length) return;
+  if (!to.length || !r.ticket_id) return;
 
-  const ref = `#${String(ticket.ticket_number).padStart(5, '0')}`;
+  const ref = `#${String(r.ticket_number ?? '').padStart(5, '0')}`;
   const html = brandLayout({
     badgeLabel: 'NEW REPLY',
     badgeBg: '#fbeaf0',
     badgeFg: '#72243e',
-    title: `${opts.senderName} replied on ${ref}`,
-    intro: ticket.title,
+    title: `${r.sender_name ?? opts.senderEmail} replied on ${ref}`,
+    intro: r.ticket_title ?? '',
     bodyHtml: `<p style="margin:0;font:400 13px/1.6 Arial,Helvetica,sans-serif;color:#374151;white-space:pre-wrap">${escapeHtml(
       opts.text.slice(0, 1500),
     )}</p>`,
     ctaLabel: 'View ticket',
-    ctaHref: appLink(`/tickets?ticket=${ticket.id}`),
+    ctaHref: appLink(`/tickets?ticket=${r.ticket_id}`),
   });
-  await sendMail(to, `New reply on ticket ${ref}`, html, {
-    replyTo: ticketReplyTo(ticket.id, { internal: opts.internal }),
+  await sendMail(Array.from(new Set(to)), `New reply on ticket ${ref}`, html, {
+    replyTo: ticketReplyTo(r.ticket_id, { internal: opts.internal }),
   });
 }
